@@ -44,9 +44,9 @@ class Client:
         type(self).state=kwargs['state']
         return SimpleNamespace(model='test-jev',answers={
             'mark_strategy':SimpleNamespace(choice=self.strategy,confidence=self.confidence),
-            'mark_1':SimpleNamespace(choice='mark-1',confidence=.9),
-            'mark_2':SimpleNamespace(choice='mark-1',confidence=.9),
-            'mark_3':SimpleNamespace(choice='invented-mark',confidence=.9)})
+            'mark-1':SimpleNamespace(choice='include',confidence=.9),
+            'mark-2':SimpleNamespace(choice='omit',confidence=.9),
+            'invented-mark':SimpleNamespace(choice='include',confidence=.9)})
 
 def test_jev_selects_only_validated_candidate_ids_and_keeps_receipt():
     result=JevVisualizationRouter(api_key='test',client_factory=Client).plan_kline_annotations(question='标记支撑位',proposals=[proposal(),proposal(price=1000)],**CTX)
@@ -63,3 +63,25 @@ def test_no_mark_and_low_confidence_do_not_force_annotations(strategy,confidence
 def test_missing_credentials_fail_explicitly():
     with pytest.raises(JevVisualizationRouterError):
         JevVisualizationRouter(api_key='').plan_kline_annotations(question='标记',**CTX)
+
+
+def test_independent_candidate_selection_avoids_competing_valid_marks():
+    class Include(Client):
+        def system_one(self, **kwargs):
+            assert all(set(v.criteria) == {'include', 'omit'} for k, v in kwargs['questions'].items() if k != 'mark_strategy')
+            return SimpleNamespace(model='test-jev', answers={
+                'mark_strategy': SimpleNamespace(choice='threshold-reference', confidence=.95),
+                **{key: SimpleNamespace(choice='include', confidence=.9) for key in kwargs['state']['candidates']},
+            })
+    result=JevVisualizationRouter(api_key='test',client_factory=Include).plan_kline_annotations(question='支撑压力和MA20', **CTX)
+    assert len(result.annotations)==3
+
+
+def test_low_confidence_candidate_is_omitted():
+    class Uncertain(Client):
+        def system_one(self, **kwargs):
+            return SimpleNamespace(model='test-jev', answers={
+                'mark_strategy': SimpleNamespace(choice='threshold-reference', confidence=.95),
+                'mark-1': SimpleNamespace(choice='include', confidence=.3),
+            })
+    assert JevVisualizationRouter(api_key='test',client_factory=Uncertain).plan_kline_annotations(question='支撑',proposals=[proposal()],**CTX).annotations==()

@@ -170,17 +170,15 @@ def plan_kline_annotations(router: Any, *, question: str, symbol: str, period: s
     candidates = normalize_kline_annotations(raw, symbol=symbol, period=period, ohlcv=ohlcv, ma_periods=ma_periods, market=market, requested_type=requested_type)
     if not candidates:
         return JevKlineAnnotationPlan((), 'no-mark', 0, '')
-    criteria = {'no-mark': 'No sufficiently supported or useful mark. Do not invent a price, date, or trading signal.'}
-    mapping = {}
-    for i, mark in enumerate(candidates):
-        key = f'mark-{i + 1}'
-        mapping[key] = mark
-        criteria[key] = str({k: mark[k] for k in ('type', 'points', 'text')})
-    state = {'request': str(question)[:6000], 'symbol': symbol, 'period': period, 'candidates': list(mapping.values()), 'constraint': 'Select only supplied validated coordinates. Buy/sell marks are references, not execution or guaranteed signals.'}
+    mapping = {f'mark-{i + 1}': mark for i, mark in enumerate(candidates)}
+    state = {'request': str(question)[:6000], 'symbol': symbol, 'period': period, 'candidates': mapping, 'constraint': 'Evaluate each validated candidate independently. Do not invent coordinates. Buy/sell marks are references, not execution or guaranteed signals.'}
     with router.client_factory(api_key=router.api_key, model=router.model, timeout=router.timeout) as client:
         response = client.system_one(state=state, questions={
             'mark_strategy': Choice(instructions='Choose the mark purpose. No-mark suppresses every annotation.', criteria={k: router.MARK_STRATEGIES[k] for k in ('no-mark', 'threshold-reference', 'turning-points', 'event-callouts', 'risk-outliers')}),
-            **{f'mark_{i}': Choice(instructions='Select a useful evidence-backed mark; avoid duplicates. Use no-mark for unnecessary additional marks.', criteria=criteria) for i in range(1, 4)},
+            **{key: Choice(instructions=f'Evaluate candidate {key} independently against the user request.', criteria={
+                'include': f'This validated candidate directly supports the requested analysis: {mark["text"]}, {mark["type"]}, {mark["points"]}.',
+                'omit': 'This candidate is unnecessary, irrelevant, or insufficiently supported for the request.',
+            }) for key, mark in mapping.items()},
         })
     answers = response.answers
     strategy = answers.get('mark_strategy')
@@ -188,12 +186,14 @@ def plan_kline_annotations(router: Any, *, question: str, symbol: str, period: s
     strategy_name = str(getattr(strategy, 'choice', 'no-mark'))
     if strategy_name not in {'threshold-reference', 'turning-points', 'event-callouts', 'risk-outliers'} or confidence < min_confidence:
         return JevKlineAnnotationPlan((), 'no-mark', confidence, str(getattr(response, 'model', '')))
-    selected, used = [], set()
-    for i in range(1, 4):
-        answer = answers.get(f'mark_{i}')
-        key = str(getattr(answer, 'choice', ''))
-        if key in mapping and key not in used and router._confidence(answer) >= min_confidence:
-            selected.append({**mapping[key], 'source': 'jev-kline-plan'}); used.add(key)
+    ranked = []
+    for key, mark in mapping.items():
+        answer = answers.get(key)
+        score = router._confidence(answer)
+        if getattr(answer, 'choice', '') == 'include' and score >= min_confidence:
+            ranked.append((score, mark))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    selected = [{**mark, 'source': 'jev-kline-plan'} for _, mark in ranked[:3]]
     return JevKlineAnnotationPlan(tuple(selected), strategy_name, confidence, str(getattr(response, 'model', '')))
 
 
