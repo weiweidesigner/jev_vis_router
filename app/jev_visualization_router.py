@@ -6,6 +6,8 @@ from typing import Any, Callable
 
 from typesafe_sdk import Choice, TypeSafeClient
 
+from .jev_kline_annotations import JevKlineAnnotationPlan, plan_kline_annotations
+
 
 class JevVisualizationRouterError(RuntimeError):
     pass
@@ -111,6 +113,13 @@ class JevVisualizationRouter:
     @property
     def configured(self) -> bool:
         return bool(self.api_key)
+
+    def plan_kline_annotations(self, **kwargs: Any) -> JevKlineAnnotationPlan:
+        """Select native K-line marks from validated, already fetched evidence."""
+        try:
+            return plan_kline_annotations(self, **kwargs)
+        except Exception as exc:
+            raise JevVisualizationRouterError(f"JEV K线标记规划失败：{exc}") from exc
 
     def route(
         self,
