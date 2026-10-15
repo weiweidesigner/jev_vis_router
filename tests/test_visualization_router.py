@@ -138,3 +138,18 @@ def test_jev_visualization_router_falls_back_on_low_primary_confidence() -> None
     with pytest.raises(JevVisualizationRouterError, match="主可视化置信度"):
         router.route(question="画图", candidates=VISUAL_CANDIDATES)
 
+
+
+@pytest.mark.parametrize("columns", ["1", "2", "3", "4"])
+def test_router_returns_mobile_intraday_columns(columns):
+    class GridClient(FakeClient):
+        primary_choice = "visual-1"
+        supporting_choice = "no-visual"
+        def system_one(self, *, state, questions):
+            assert "mobile_columns" in questions
+            result = super().system_one(state=state, questions=questions)
+            result.answers["mobile_columns"] = SimpleNamespace(choice=columns, confidence=0.9)
+            return result
+    router = JevVisualizationRouter(api_key="test-key", client_factory=GridClient)
+    decision = router.route(question="比较多只股票的分时", candidates=[{"script":"multi_intraday.py", "family":"business-chart", "label":"多分时", "description":"Intraday comparison"}])
+    assert decision.mobile_columns == int(columns)

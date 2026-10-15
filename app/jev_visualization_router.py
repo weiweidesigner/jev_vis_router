@@ -32,6 +32,7 @@ class JevVisualizationDecision:
     evidence_strategy_confidence: float = 0.0
     mark_strategy: str = "no-mark"
     mark_strategy_confidence: float = 0.0
+    mobile_columns: int = 2
 
 
 class JevVisualizationRouter:
@@ -205,6 +206,10 @@ class JevVisualizationRouter:
                             ),
                             criteria=self.EVIDENCE_STRATEGIES,
                         ),
+                        "mobile_columns": Choice(
+                            instructions="Choose the mobile intraday comparison grid column count. Honor an explicit user request. Prefer 2 for ordinary multi-stock comparisons; 1 for detailed indicators or volume; 3 or 4 only for dense overviews/watchlists. This layout applies only when multi_intraday.py is selected.",
+                            criteria={"1": "One chart per row, detailed", "2": "Two charts per row, balanced comparison", "3": "Three charts per row, dense overview", "4": "Four charts per row, compact watchlist"},
+                        ),
                         "mark_strategy": Choice(
                             instructions=(
                                 "Choose whether the chart needs an evidence-backed annotation layer. Marks must clarify a "
@@ -290,6 +295,7 @@ class JevVisualizationRouter:
             evidence_strategy_confidence=self._confidence(evidence_answer),
             mark_strategy=mark_strategy,
             mark_strategy_confidence=self._confidence(mark_answer),
+            mobile_columns=int(getattr(response.answers.get("mobile_columns"), "choice", "2")) if str(getattr(response.answers.get("mobile_columns"), "choice", "2")) in {"1", "2", "3", "4"} else 2,
         )
 
     @staticmethod
