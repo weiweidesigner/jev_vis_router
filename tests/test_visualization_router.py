@@ -141,6 +141,21 @@ def test_explicit_chart_request_overrides_local_model_abstention() -> None:
     assert decision.primary_confidence == 1.0
 
 
+def test_explicit_chart_request_overrides_wrong_local_model_choice() -> None:
+    class WrongChartClient(FakeClient):
+        primary_choice = "visual-2"
+        primary_confidence = 0.9
+
+    router = JevVisualizationRouter(client_factory=WrongChartClient)
+    decision = router.route(
+        question="请用折线图展示趋势",
+        candidates=VISUAL_CANDIDATES,
+    )
+
+    assert decision.primary_script == "line_chart.py"
+    assert decision.primary_confidence == 1.0
+
+
 def test_generic_visual_normalizes_business_only_evidence_strategy() -> None:
     class GenericClient(FakeClient):
         primary_choice = "visual-1"

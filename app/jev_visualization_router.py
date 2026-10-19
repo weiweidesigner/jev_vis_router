@@ -260,15 +260,15 @@ class JevVisualizationRouter:
         mark_strategy = str(getattr(mark_answer, "choice", "") or "")
         if mark_strategy not in self.MARK_STRATEGIES:
             mark_strategy = "no-mark"
-        if primary_confidence < self.min_primary_confidence:
+        explicit_primary = self._explicit_requested_script(question, normalized)
+        if primary_confidence < self.min_primary_confidence and not explicit_primary:
             raise JevVisualizationRouterError(
                 f"Laya 主可视化置信度 {primary_confidence:.0%} 低于阈值 {self.min_primary_confidence:.0%}"
             )
 
         primary = key_to_script[primary_key]
         supporting = key_to_script[supporting_key]
-        explicit_primary = self._explicit_requested_script(question, normalized)
-        if primary is None and explicit_primary:
+        if explicit_primary:
             primary = explicit_primary
             primary_confidence = 1.0
         if primary is None or supporting == primary or supporting_confidence < self.min_supporting_confidence:
