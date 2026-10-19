@@ -128,7 +128,7 @@ class JevVisualizationRouter:
         try:
             return plan_kline_annotations(self, **kwargs)
         except Exception as exc:
-            raise JevVisualizationRouterError(f"JEV K线标记规划失败：{exc}") from exc
+            raise JevVisualizationRouterError(f"Laya K线标记规划失败：{exc}") from exc
 
     def route(
         self,
@@ -140,7 +140,7 @@ class JevVisualizationRouter:
             raise JevVisualizationRouterError("未配置 LAYA_DECISION_URL")
         normalized = self._normalize_candidates(candidates)
         if not normalized:
-            raise JevVisualizationRouterError("没有可供 JEV 选择的可视化组件")
+            raise JevVisualizationRouterError("没有可供 Laya 选择的可视化组件")
 
         key_to_script: dict[str, str | None] = {self.NO_VISUAL: None}
         criteria: dict[str, str] = {
@@ -239,7 +239,7 @@ class JevVisualizationRouter:
                     },
                 )
         except Exception as exc:
-            raise JevVisualizationRouterError(f"JEV 可视化路由请求失败：{exc}") from exc
+            raise JevVisualizationRouterError(f"Laya 可视化路由请求失败：{exc}") from exc
 
         primary_answer = response.answers.get("primary_visual")
         supporting_answer = response.answers.get("supporting_visual")
@@ -250,7 +250,7 @@ class JevVisualizationRouter:
         primary_key = str(getattr(primary_answer, "choice", "") or "")
         supporting_key = str(getattr(supporting_answer, "choice", "") or "")
         if primary_key not in key_to_script or supporting_key not in key_to_script:
-            raise JevVisualizationRouterError("JEV 返回了候选集合之外的可视化组件")
+            raise JevVisualizationRouterError("Laya 返回了候选集合之外的可视化组件")
         primary_confidence = self._confidence(primary_answer)
         supporting_confidence = self._confidence(supporting_answer)
         semantic_lens = str(getattr(lens_answer, "choice", "") or "")
@@ -268,7 +268,7 @@ class JevVisualizationRouter:
             mark_strategy = "no-mark"
         if primary_confidence < self.min_primary_confidence:
             raise JevVisualizationRouterError(
-                f"JEV 主可视化置信度 {primary_confidence:.0%} 低于阈值 {self.min_primary_confidence:.0%}"
+                f"Laya 主可视化置信度 {primary_confidence:.0%} 低于阈值 {self.min_primary_confidence:.0%}"
             )
 
         primary = key_to_script[primary_key]

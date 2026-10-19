@@ -1,4 +1,4 @@
-# JEV Visualization Router
+# Local Laya Visualization Router
 
 可视化路由模块。通过本地开源 Laya，从调用方提供的组件候选中选择主图、可选辅助图，并返回分析角度、视觉编码、证据策略与标记策略。
 
@@ -56,7 +56,7 @@ python -m pytest tests -q
 
 ## K线标记规划与统一策略
 
-`router.plan_kline_annotations(question=..., symbol=..., period=..., ohlcv=..., proposals=..., ma_periods=[20,50,200])` 返回 `JevKlineAnnotationPlan`。数据必须由调用方先取得；本仓库不取行情、不绘图。JEV 只能选择已经通过标的、周期、日期、价格范围校验的候选坐标，低置信度及 `no-mark` 返回空标记。候选可来自已有分析结果；未传候选时只从已提供行情计算区间高低点、近20根支撑压力、最新收盘及有足够样本的均线。不能生成未来价格、未知事件或缺失数据的均线。
+`router.plan_kline_annotations(question=..., symbol=..., period=..., ohlcv=..., proposals=..., ma_periods=[20,50,200])` 返回 `JevKlineAnnotationPlan`。数据必须由调用方先取得；本仓库不取行情、不绘图。本地 Laya 只能选择已经通过标的、周期、日期、价格范围校验的候选坐标，低置信度及 `no-mark` 返回空标记。候选可来自已有分析结果；未传候选时只从已提供行情计算区间高低点、近20根支撑压力、最新收盘及有足够样本的均线。不能生成未来价格、未知事件或缺失数据的均线。
 
 返回原生 `annotations`：支持水平/垂直线、双点线段/射线、买卖点、文字与气泡。统一进行去重、周期绑定、语义配色与 MA 色一致性；显式十六进制颜色优先。买卖点按调用方市场采用相同涨跌色约定。渲染器负责像素坐标、标签避碰、图例、移动端交互。
 
@@ -66,4 +66,4 @@ python -m pytest tests -q
 python app/jev_kline_annotations.py --payload verified-kline.json --question "标记支撑压力" --output marked-kline.json
 ```
 
-输出保留原行情，增加 `annotations` 和 `jevAnnotationPlan` 规划来源。`--normalize-only` 只校验和配色已有标记，明确记录 `modelSelected:false`，适用于已验证的缓存案例；不会伪造一次 JEV 模型推理。
+输出保留原行情，增加 `annotations` 和 `jevAnnotationPlan` 规划来源。`--normalize-only` 只校验和配色已有标记，明确记录 `modelSelected:false`，适用于已验证的缓存案例；不会伪造一次 Laya 模型推理。
