@@ -60,9 +60,9 @@ def test_no_mark_and_low_confidence_do_not_force_annotations(strategy,confidence
     Abstain.strategy=strategy;Abstain.confidence=confidence
     assert JevVisualizationRouter(api_key='test',client_factory=Abstain).plan_kline_annotations(question='标记',proposals=[proposal()],**CTX).annotations==()
 
-def test_missing_credentials_fail_explicitly():
+def test_missing_local_endpoint_fails_explicitly():
     with pytest.raises(JevVisualizationRouterError):
-        JevVisualizationRouter(api_key='').plan_kline_annotations(question='标记',**CTX)
+        JevVisualizationRouter(endpoint='').plan_kline_annotations(question='标记',**CTX)
 
 
 def test_independent_candidate_selection_avoids_competing_valid_marks():

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from typesafe_sdk import Choice
+from .laya_client import Choice
 
 MA_COLORS = ('#fbbf24', '#8b5cf6', '#38bdf8', '#f97316')
 REFERENCE_COLORS = ('#fb923c', '#38bdf8', '#fbbf24', '#8b5cf6', '#f472b6', '#60a5fa')
@@ -165,14 +165,14 @@ class JevKlineAnnotationPlan:
 
 def plan_kline_annotations(router: Any, *, question: str, symbol: str, period: str, ohlcv: list[dict[str, Any]], proposals: Any = None, ma_periods: list[int] | None = None, market: str = 'US', language: str = 'zh-CN', requested_type: str = '', min_confidence: float = .55) -> JevKlineAnnotationPlan:
     if not router.configured:
-        raise ValueError('未配置 TYPESAFE_API_KEY')
+        raise ValueError('未配置 LAYA_DECISION_URL')
     raw = proposals if proposals else build_kline_candidates(symbol=symbol, period=period, ohlcv=ohlcv, ma_periods=ma_periods, language=language, requested_type=requested_type)
     candidates = normalize_kline_annotations(raw, symbol=symbol, period=period, ohlcv=ohlcv, ma_periods=ma_periods, market=market, requested_type=requested_type)
     if not candidates:
         return JevKlineAnnotationPlan((), 'no-mark', 0, '')
     mapping = {f'mark-{i + 1}': mark for i, mark in enumerate(candidates)}
     state = {'request': str(question)[:6000], 'symbol': symbol, 'period': period, 'candidates': mapping, 'constraint': 'Evaluate each validated candidate independently. Do not invent coordinates. Buy/sell marks are references, not execution or guaranteed signals.'}
-    with router.client_factory(api_key=router.api_key, model=router.model, timeout=router.timeout) as client:
+    with router.client_factory(endpoint=router.endpoint, model=router.model, timeout=router.timeout) as client:
         response = client.system_one(state=state, questions={
             'mark_strategy': Choice(instructions='Choose the mark purpose. No-mark suppresses every annotation.', criteria={k: router.MARK_STRATEGIES[k] for k in ('no-mark', 'threshold-reference', 'turning-points', 'event-callouts', 'risk-outliers')}),
             **{key: Choice(instructions=f'Evaluate candidate {key} independently against the user request.', criteria={
@@ -230,7 +230,7 @@ def main() -> int:
     else:
         plan = JevVisualizationRouter().plan_kline_annotations(question=args.question, proposals=props.get('annotations'), language=str(props.get('language') or 'zh-CN'), **options)
         marks = plan.annotations
-        receipt = {'policy': 'jev_vis_router', 'selection': 'jev', 'modelSelected': True, 'strategy': plan.mark_strategy, 'confidence': plan.confidence, 'model': plan.provider_model}
+        receipt = {'policy': 'jev_vis_router', 'provider': 'local-laya', 'selection': 'laya', 'modelSelected': True, 'strategy': plan.mark_strategy, 'confidence': plan.confidence, 'model': plan.provider_model}
     other_periods = [mark for mark in props.get('annotations', []) if isinstance(mark, dict) and mark.get('period') and str(mark['period']) != period]
     props['annotations'] = [*other_periods, *marks]
     receipt['period'] = period

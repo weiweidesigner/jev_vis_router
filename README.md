@@ -1,6 +1,6 @@
 # JEV Visualization Router
 
-可视化路由模块。通过 TypeSafe JEV，从调用方提供的组件候选中选择主图、可选辅助图，并返回分析角度、视觉编码、证据策略与标记策略。
+可视化路由模块。通过本地开源 Laya，从调用方提供的组件候选中选择主图、可选辅助图，并返回分析角度、视觉编码、证据策略与标记策略。
 
 ## 安装
 
@@ -31,14 +31,15 @@ result = router.route(
 print(asdict(result))
 ```
 
-真实请求需配置 `TYPESAFE_API_KEY`。其他环境变量：
+真实请求由本地 Laya 服务提供，不需要 API Key。环境变量：
 
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
-| `TYPESAFE_MODEL` | `jev-latest` | JEV 模型 |
-| `TYPESAFE_TIMEOUT_SECONDS` | `20` | 请求超时 |
-| `TYPESAFE_VISUAL_PRIMARY_MIN_CONFIDENCE` | `0.35` | 主图置信度阈值 |
-| `TYPESAFE_VISUAL_SUPPORTING_MIN_CONFIDENCE` | `0.55` | 辅助图置信度阈值 |
+| `LAYA_DECISION_URL` | `http://127.0.0.1:8791/predict` | 本地 Laya 决策接口 |
+| `LAYA_VISUAL_MODEL` | `convaiinnovations/laya-multilingual` | 开源模型标识 |
+| `LAYA_VISUAL_TIMEOUT_SECONDS` | `90` | 本地推理超时 |
+| `LAYA_VISUAL_PRIMARY_MIN_CONFIDENCE` | `0.35` | 主图置信度阈值 |
+| `LAYA_VISUAL_SUPPORTING_MIN_CONFIDENCE` | `0.55` | 辅助图置信度阈值 |
 
 候选组件必须由调用方提供，建议描述包含组件 Schema 的相关语义。路由仅提供决策；数据获取、Schema 验证、图表渲染与最终解释由宿主执行。
 
@@ -51,7 +52,7 @@ python -m pip install -r requirements-dev.txt
 python -m pytest tests -q
 ```
 
-测试使用模拟 SDK 客户端，无需 API 密钥或外部请求。只包含可视化路由，不包含模型路由、工具活动路由或宿主应用。
+测试使用模拟本地客户端，无需启动模型或外部请求。只包含可视化路由，不包含模型路由、工具活动路由或宿主应用。
 
 ## K线标记规划与统一策略
 

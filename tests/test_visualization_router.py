@@ -75,7 +75,7 @@ VISUAL_CANDIDATES = [
 ]
 
 
-def test_jev_visualization_router_selects_primary_and_distinct_support() -> None:
+def test_laya_visualization_router_selects_primary_and_distinct_support() -> None:
     router = JevVisualizationRouter(api_key="test-key", client_factory=FakeClient)
     decision = router.route(question="分析收入、利润和业务收入构成", candidates=VISUAL_CANDIDATES)
 
@@ -91,6 +91,15 @@ def test_jev_visualization_router_selects_primary_and_distinct_support() -> None
     assert decision.primary_purpose == "Revenue and profit"
     assert decision.supporting_purpose == "Business mix"
     assert len(FakeClient.captured_state["available_visualizations"]) == 3
+
+
+def test_router_defaults_to_local_open_source_laya(monkeypatch) -> None:
+    monkeypatch.delenv("LAYA_DECISION_URL", raising=False)
+    monkeypatch.delenv("LAYA_VISUAL_MODEL", raising=False)
+    router = JevVisualizationRouter()
+    assert router.configured is True
+    assert router.endpoint == "http://127.0.0.1:8791/predict"
+    assert router.model == "convaiinnovations/laya-multilingual"
 
 
 def test_jev_visualization_router_omits_low_confidence_support() -> None:

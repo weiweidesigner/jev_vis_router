@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from typesafe_sdk import Choice, TypeSafeClient
+from .laya_client import Choice, LocalLayaClient
 
 from .jev_kline_annotations import JevKlineAnnotationPlan, plan_kline_annotations
 
@@ -90,30 +90,38 @@ class JevVisualizationRouter:
         self,
         *,
         api_key: str | None = None,
+        endpoint: str | None = None,
         model: str | None = None,
         timeout: float | None = None,
         min_primary_confidence: float | None = None,
         min_supporting_confidence: float | None = None,
-        client_factory: Callable[..., Any] = TypeSafeClient,
+        client_factory: Callable[..., Any] = LocalLayaClient,
     ) -> None:
-        self.api_key = (api_key if api_key is not None else os.getenv("TYPESAFE_API_KEY", "")).strip()
-        self.model = (model if model is not None else os.getenv("TYPESAFE_MODEL", "jev-latest")).strip() or "jev-latest"
-        self.timeout = timeout if timeout is not None else float(os.getenv("TYPESAFE_TIMEOUT_SECONDS", "20"))
+        # api_key remains accepted so existing callers fail neither at import nor construction.
+        # Local Laya does not use it.
+        self.api_key = str(api_key or "")
+        self.endpoint = (
+            endpoint if endpoint is not None else os.getenv("LAYA_DECISION_URL", "http://127.0.0.1:8791/predict")
+        ).strip()
+        self.model = (
+            model if model is not None else os.getenv("LAYA_VISUAL_MODEL", "convaiinnovations/laya-multilingual")
+        ).strip() or "convaiinnovations/laya-multilingual"
+        self.timeout = timeout if timeout is not None else float(os.getenv("LAYA_VISUAL_TIMEOUT_SECONDS", "90"))
         self.min_primary_confidence = (
             min_primary_confidence
             if min_primary_confidence is not None
-            else float(os.getenv("TYPESAFE_VISUAL_PRIMARY_MIN_CONFIDENCE", "0.35"))
+            else float(os.getenv("LAYA_VISUAL_PRIMARY_MIN_CONFIDENCE", "0.35"))
         )
         self.min_supporting_confidence = (
             min_supporting_confidence
             if min_supporting_confidence is not None
-            else float(os.getenv("TYPESAFE_VISUAL_SUPPORTING_MIN_CONFIDENCE", "0.55"))
+            else float(os.getenv("LAYA_VISUAL_SUPPORTING_MIN_CONFIDENCE", "0.55"))
         )
         self.client_factory = client_factory
 
     @property
     def configured(self) -> bool:
-        return bool(self.api_key)
+        return bool(self.endpoint)
 
     def plan_kline_annotations(self, **kwargs: Any) -> JevKlineAnnotationPlan:
         """Select native K-line marks from validated, already fetched evidence."""
@@ -128,8 +136,8 @@ class JevVisualizationRouter:
         question: str,
         candidates: list[dict[str, str]],
     ) -> JevVisualizationDecision:
-        if not self.api_key:
-            raise JevVisualizationRouterError("未配置 TYPESAFE_API_KEY")
+        if not self.endpoint:
+            raise JevVisualizationRouterError("未配置 LAYA_DECISION_URL")
         normalized = self._normalize_candidates(candidates)
         if not normalized:
             raise JevVisualizationRouterError("没有可供 JEV 选择的可视化组件")
@@ -160,7 +168,7 @@ class JevVisualizationRouter:
             ),
         }
         try:
-            with self.client_factory(api_key=self.api_key, model=self.model, timeout=self.timeout) as client:
+            with self.client_factory(endpoint=self.endpoint, model=self.model, timeout=self.timeout) as client:
                 response = client.system_one(
                     state=state,
                     questions={
