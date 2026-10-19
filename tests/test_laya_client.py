@@ -45,15 +45,18 @@ def test_local_laya_client_serializes_choices_and_maps_confidence(monkeypatch):
                 "chart": Choice(instructions="choose", criteria={"line": "trend", "bar": "rank"}),
                 "support": Choice(instructions="choose", criteria={"yes": "yes", "no": "no"}),
                 "mark": Choice(instructions="choose", criteria={"keep": "keep", "omit": "omit"}),
+                "lens": Choice(instructions="choose", criteria={f"lens-{index}": str(index) for index in range(5)}),
             },
         )
 
-    assert len(captured) == 2
-    assert all(len(call["json"]["questions"]) <= 2 for call in captured)
+    assert len(captured) == 6
+    assert all(len(call["json"]["questions"]) == 1 for call in captured)
+    assert all(len(next(iter(call["json"]["questions"].values()))["criteria"]) <= 3 for call in captured)
+    assert all("available_visualizations" not in call["json"]["state"] for call in captured)
     assert captured[0]["url"] == "http://127.0.0.1:8791/predict"
     assert captured[0]["allow_redirects"] is False
     assert captured[0]["json"]["questions"]["chart"]["type"] == "choice"
     assert response.model == "convaiinnovations/laya-multilingual"
     assert response.answers["chart"].choice == "line"
     assert response.answers["chart"].confidence == pytest.approx(.6)
-    assert set(response.answers) == {"chart", "support", "mark"}
+    assert set(response.answers) == {"chart", "support", "mark", "lens"}
