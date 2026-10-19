@@ -34,10 +34,10 @@ def _confidence(probabilities: Mapping[str, Any]) -> float:
         raise ValueError("Laya 概率分布无效")
     if abs(sum(values) - 1) > .002:
         raise ValueError("Laya 概率分布之和无效")
-    if len(values) == 1:
-        return 1.0
-    maximum = max(values)
-    return max(0.0, min(1.0, (maximum - 1 / len(values)) / (1 - 1 / len(values))))
+    # Visualization selection is non-transactional. Preserve the selected
+    # option probability rather than applying the conservative trading gate's
+    # normalized-margin transform.
+    return max(values)
 
 
 class LocalLayaClient:

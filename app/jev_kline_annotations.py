@@ -174,8 +174,8 @@ def plan_kline_annotations(router: Any, *, question: str, symbol: str, period: s
     state = {'request': str(question)[:6000], 'symbol': symbol, 'period': period, 'candidates': mapping, 'constraint': 'Evaluate each validated candidate independently. Do not invent coordinates. Buy/sell marks are references, not execution or guaranteed signals.'}
     with router.client_factory(endpoint=router.endpoint, model=router.model, timeout=router.timeout) as client:
         response = client.system_one(state=state, questions={
-            'mark_strategy': Choice(instructions='Choose the mark purpose. No-mark suppresses every annotation.', criteria={k: router.MARK_STRATEGIES[k] for k in ('no-mark', 'threshold-reference', 'turning-points', 'event-callouts', 'risk-outliers')}),
-            **{key: Choice(instructions=f'Evaluate candidate {key} independently against the user request.', criteria={
+            'mark_strategy': Choice(instructions='按用户请求选择标记用途；用户明确要求支撑、压力、事件或拐点标记时，不得选 no-mark。', criteria={k: router.MARK_STRATEGIES[k] for k in ('no-mark', 'threshold-reference', 'turning-points', 'event-callouts', 'risk-outliers')}),
+            **{key: Choice(instructions=f'根据用户请求独立评估已验证候选 {key}；明确要求且直接匹配时选 include。', criteria={
                 'include': f'This validated candidate directly supports the requested analysis: {mark["text"]}, {mark["type"]}, {mark["points"]}.',
                 'omit': 'This candidate is unnecessary, irrelevant, or insufficiently supported for the request.',
             }) for key, mark in mapping.items()},

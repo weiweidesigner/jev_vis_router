@@ -58,5 +58,5 @@ def test_local_laya_client_serializes_choices_and_maps_confidence(monkeypatch):
     assert captured[0]["json"]["questions"]["chart"]["type"] == "choice"
     assert response.model == "convaiinnovations/laya-multilingual"
     assert response.answers["chart"].choice == "line"
-    assert response.answers["chart"].confidence == pytest.approx(.6)
+    assert response.answers["chart"].confidence == pytest.approx(.8)
     assert set(response.answers) == {"chart", "support", "mark", "lens"}

@@ -145,8 +145,7 @@ class JevVisualizationRouter:
         key_to_script: dict[str, str | None] = {self.NO_VISUAL: None}
         criteria: dict[str, str] = {
             self.NO_VISUAL: (
-                "Do not render a visualization because the request is a simple scalar/status/action, lacks trustworthy "
-                "structured evidence, or a chart would not improve the answer."
+                "仅当用户未要求图表，且问题只是简单状态/单一数值、缺乏可信数据或图表无助于回答时，才不生成可视化。"
             )
         }
         available: list[dict[str, str]] = []
@@ -174,18 +173,13 @@ class JevVisualizationRouter:
                     questions={
                         "primary_visual": Choice(
                             instructions=(
-                                "Choose exactly one best primary visualization for the request from the supplied real Aime "
-                                "Chart components. Prefer a business component when its built-in financial semantics and data "
-                                "contract directly match. Prefer a generic component for user-provided/upstream data, cross-asset "
-                                "comparisons, custom encodings, or logic/event structures. Choose no-visual when a chart is not useful."
+                                "从真实候选组件中选择最符合用户请求的一个主图。用户明确指定的图表形式是硬约束，必须选择匹配组件。内置金融语义直接匹配时优先业务图；用户数据、跨资产比较或自定义编码优先通用图。只有图表确实无用时才选 no-visual。"
                             ),
                             criteria=criteria,
                         ),
                         "supporting_visual": Choice(
                             instructions=(
-                                "Optionally choose one distinct supporting visualization only when it answers a second material "
-                                "dimension in the request and improves evidence richness. Do not duplicate the primary chart, and "
-                                "choose no-visual for ordinary single-view requests."
+                                "只有候选图能回答第二个重要分析维度时，才选一张辅助图；不得与主图重复。普通单视图请求选 no-visual。"
                             ),
                             criteria=criteria,
                         ),
