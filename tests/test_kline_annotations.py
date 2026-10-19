@@ -84,4 +84,17 @@ def test_low_confidence_candidate_is_omitted():
                 'mark_strategy': SimpleNamespace(choice='threshold-reference', confidence=.95),
                 'mark-1': SimpleNamespace(choice='include', confidence=.3),
             })
-    assert JevVisualizationRouter(api_key='test',client_factory=Uncertain).plan_kline_annotations(question='支撑',proposals=[proposal()],**CTX).annotations==()
+    assert JevVisualizationRouter(api_key='test',client_factory=Uncertain).plan_kline_annotations(question='标记参考点',proposals=[proposal()],**CTX).annotations==()
+
+
+def test_explicit_validated_proposal_overrides_local_model_abstention():
+    class Abstain(Client):
+        strategy='no-mark'
+        confidence=.95
+        def system_one(self, **kwargs):
+            return SimpleNamespace(model='test-laya', answers={
+                'mark_strategy': SimpleNamespace(choice='no-mark', confidence=.95),
+                'mark-1': SimpleNamespace(choice='omit', confidence=.95),
+            })
+    result=JevVisualizationRouter(client_factory=Abstain).plan_kline_annotations(question='请用水平线标记支撑',proposals=[proposal()],**CTX)
+    assert result.mark_strategy=='threshold-reference' and len(result.annotations)==1

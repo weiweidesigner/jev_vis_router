@@ -126,6 +126,21 @@ def test_jev_visualization_router_does_not_force_a_chart() -> None:
     assert decision.supporting_script is None
 
 
+def test_explicit_chart_request_overrides_local_model_abstention() -> None:
+    class NoVisualClient(FakeClient):
+        primary_choice = "no-visual"
+        primary_confidence = 0.9
+        supporting_choice = "no-visual"
+
+    router = JevVisualizationRouter(client_factory=NoVisualClient)
+    decision = router.route(
+        question="请用折线图展示趋势",
+        candidates=[VISUAL_CANDIDATES[0]],
+    )
+    assert decision.primary_script == "line_chart.py"
+    assert decision.primary_confidence == 1.0
+
+
 def test_generic_visual_normalizes_business_only_evidence_strategy() -> None:
     class GenericClient(FakeClient):
         primary_choice = "visual-1"

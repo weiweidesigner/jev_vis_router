@@ -267,6 +267,10 @@ class JevVisualizationRouter:
 
         primary = key_to_script[primary_key]
         supporting = key_to_script[supporting_key]
+        explicit_primary = self._explicit_requested_script(question, normalized)
+        if primary is None and explicit_primary:
+            primary = explicit_primary
+            primary_confidence = 1.0
         if primary is None or supporting == primary or supporting_confidence < self.min_supporting_confidence:
             supporting = None
         selected = tuple(script for script in (primary, supporting) if script)
@@ -299,6 +303,30 @@ class JevVisualizationRouter:
             mark_strategy_confidence=self._confidence(mark_answer),
             mobile_columns=int(getattr(response.answers.get("mobile_columns"), "choice", "2")) if str(getattr(response.answers.get("mobile_columns"), "choice", "2")) in {"1", "2", "3", "4"} else 2,
         )
+
+    @staticmethod
+    def _explicit_requested_script(question: str, candidates: list[dict[str, str]]) -> str | None:
+        text = str(question or "").lower()
+        terms = {
+            "kline.py": ("k线", "蜡烛", "candlestick"),
+            "line_chart.py": ("折线图", "line chart"),
+            "group_line.py": ("分组折线", "多折线", "group line"),
+            "bar_chart.py": ("柱状图", "bar chart"),
+            "grouped_bar.py": ("分组柱状", "grouped bar"),
+            "pie.py": ("饼图", "饼状图", "pie chart"),
+            "treemap.py": ("矩形树图", "treemap"),
+            "timeline.py": ("时间线", "timeline"),
+            "flowchart.py": ("流程图", "flowchart"),
+            "mind_map.py": ("思维导图", "mind map"),
+            "table.py": ("表格", "table"),
+        }
+        by_name = {str(item.get("script") or "").rsplit("/", 1)[-1]: str(item.get("script") or "") for item in candidates}
+        for filename, aliases in terms.items():
+            if filename in by_name and any(alias in text for alias in aliases):
+                return by_name[filename]
+        if len(candidates) == 1 and any(term in text for term in ("图表", "可视化", "chart", "plot")):
+            return str(candidates[0].get("script") or "") or None
+        return None
 
     @staticmethod
     def _normalize_candidates(candidates: list[dict[str, str]]) -> list[dict[str, str]]:

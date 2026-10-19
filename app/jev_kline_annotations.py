@@ -184,13 +184,23 @@ def plan_kline_annotations(router: Any, *, question: str, symbol: str, period: s
     strategy = answers.get('mark_strategy')
     confidence = router._confidence(strategy)
     strategy_name = str(getattr(strategy, 'choice', 'no-mark'))
+    request_text = str(question or '').lower()
+    explicit_strategy = (
+        'event-callouts' if any(term in request_text for term in ('事件', '催化', 'event')) else
+        'turning-points' if any(term in request_text for term in ('拐点', '高点', '低点', 'turning point')) else
+        'risk-outliers' if any(term in request_text for term in ('风险', '异常', '离群', 'outlier', 'risk')) else
+        'threshold-reference' if any(term in request_text for term in ('支撑', '压力', '阻力', '阈值', '水平线', '参考线', 'support', 'resistance', 'threshold')) else ''
+    )
+    if explicit_strategy:
+        strategy_name = explicit_strategy
+        confidence = max(confidence, 1.0)
     if strategy_name not in {'threshold-reference', 'turning-points', 'event-callouts', 'risk-outliers'} or confidence < min_confidence:
         return JevKlineAnnotationPlan((), 'no-mark', confidence, str(getattr(response, 'model', '')))
     ranked = []
     for key, mark in mapping.items():
         answer = answers.get(key)
         score = router._confidence(answer)
-        if getattr(answer, 'choice', '') == 'include' and score >= min_confidence:
+        if (getattr(answer, 'choice', '') == 'include' and score >= min_confidence) or (explicit_strategy and proposals):
             ranked.append((score, mark))
     ranked.sort(key=lambda item: item[0], reverse=True)
     selected = [{**mark, 'source': 'jev-kline-plan'} for _, mark in ranked[:3]]
