@@ -209,7 +209,7 @@ class JevVisualizationRouter:
                             criteria=self.EVIDENCE_STRATEGIES,
                         ),
                         "mobile_columns": Choice(
-                            instructions="Choose the mobile intraday comparison grid column count. Honor an explicit user request. Prefer 2 for ordinary multi-stock comparisons; 1 for detailed indicators or volume; 3 or 4 only for dense overviews/watchlists. This layout applies only when multi_intraday.py is selected.",
+                            instructions="Choose the mobile comparison grid column count for multi_intraday.py or multi_kline.py. Honor explicit user requests. Prefer 1 for candlesticks/indicators/volume detail; 2 for ordinary intraday comparisons; 3 or 4 only for dense overviews/watchlists.",
                             criteria={"1": "One chart per row, detailed", "2": "Two charts per row, balanced comparison", "3": "Three charts per row, dense overview", "4": "Four charts per row, compact watchlist"},
                         ),
                         "mark_strategy": Choice(
@@ -308,6 +308,7 @@ class JevVisualizationRouter:
     def _explicit_requested_script(question: str, candidates: list[dict[str, str]]) -> str | None:
         text = str(question or "").lower()
         terms = {
+            "multi_kline.py": ("多k线", "多k線", "多周期k线", "多股k线", "multiple candlestick", "multi kline"),
             "kline.py": ("k线", "蜡烛", "candlestick"),
             "line_chart.py": ("折线图", "line chart"),
             "group_line.py": ("分组折线", "多折线", "group line"),
