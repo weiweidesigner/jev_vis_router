@@ -292,7 +292,12 @@ def plan_kline_annotations(router: Any, *, question: str, symbol: str, period: s
         return JevKlineAnnotationPlan((), 'no-mark', 0, '')
     mapping = {f'mark-{i + 1}': mark for i, mark in enumerate(candidates)}
     state = {'request': str(question)[:6000], 'symbol': symbol, 'period': period, 'candidates': mapping,
-             'drawingCapabilities': CATALOG, 'selectionMode':selection_mode,
+             # Full definitions remain in the validator/catalog CLI. The CPU
+             # sidecar has a 2,000-token state budget; don't resend all formulas.
+             'drawingCapabilities': {'version':CATALOG['version'], 'supportedTypes':CATALOG['supportedTypes'],
+                                     'activeTypes':sorted({mark['type'] for mark in candidates}),
+                                     'styleFields':['lineWidth','lineStyle','opacity','fillColor','fillOpacity','fontSize','textColor','showLabels','extendLeft','extendRight','levels','levelColors']},
+             'selectionMode':selection_mode,
              'constraint': 'Evaluate each validated candidate independently. Use only the native catalog types/style. Never invent coordinates or claim projections are observed prices. Buy/sell and long/short positions are technical scenarios, never execution or guaranteed signals.'}
     with router.client_factory(endpoint=router.endpoint, model=router.model, timeout=router.timeout) as client:
         response = client.system_one(state=state, questions={
