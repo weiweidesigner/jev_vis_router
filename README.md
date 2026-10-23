@@ -67,3 +67,13 @@ python app/jev_kline_annotations.py --payload verified-kline.json --question "�
 ```
 
 输出保留原行情，增加 `annotations` 和 `jevAnnotationPlan` 规划来源。`--normalize-only` 只校验和配色已有标记，明确记录 `modelSelected:false`，适用于已验证的缓存案例；不会伪造一次 Laya 模型推理。
+
+### Native drawings v2
+
+`python app/jev_kline_annotations.py --catalog` prints the native renderer's mirrored public capability contract (43 types, anchor counts, style whitelist, formula semantics, explicit unsupported families). This metadata is also passed to Laya with validated candidates. The router remains independent: it never imports component code, fetches prices or draws pixels.
+
+Supported families include lines, channels/OLS regression, pitchfork variants, Fibonacci retracement/three-point extension/channel/timezone/fan, geometric paths/shapes, measurements, long/short **scenarios**, notes and emoji. Exact candle times and prices in the verified range are mandatory. Requested fib retracement and regression candidates can be derived from actual OHLCV; confirmed pivots are required for trend lines, pitchforks and fib extensions. Arbitrary geometry and position scenarios require explicit evidence-bound proposals. Missing evidence yields no mark, not substituted geometry.
+
+Styles survive validation: line width/dash/opacity, fill/color/opacity, font size/text color, level ratios/colors, label visibility and supported extensions. Unsupported CSS/HTML and order fields are never forwarded. `--selection-mode user-specified|all` preserves every validated supplied mark; automatic mode defaults to three, or `--max-marks N`. Rejected inputs are reported in `jevAnnotationPlan.rejected`.
+
+Gann, synthetic future candles, external media/posts and the remaining advanced Fibonacci tools are explicitly **not implemented**. Volume-at-price must use the actual volume-profile component/data source, not an invented OHLCV allocation. See the catalog's `unsupportedTypes` rather than assuming parity with the full TradingView drawing suite.

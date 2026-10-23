@@ -3,17 +3,79 @@ from __future__ import annotations
 
 import math
 import re
+import json
+from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from .laya_client import Choice
+if __package__:
+    from .laya_client import Choice
+else:
+    import sys
+    sys.path.insert(0, str(Path(__file__).absolute().parents[1]))
+    from app.laya_client import Choice
 
 MA_COLORS = ('#fbbf24', '#8b5cf6', '#38bdf8', '#f97316')
 REFERENCE_COLORS = ('#fb923c', '#38bdf8', '#fbbf24', '#8b5cf6', '#f472b6', '#60a5fa')
 ALIASES = {'horizontal': 'horizontal-line', 'vertical': 'vertical-line', 'straightLine': 'straight-line', 'rayLine': 'ray-line', 'arrowSegment': 'arrow-segment', 'pure-text': 'text'}
-TYPES = {'horizontal-line', 'vertical-line', 'straight-line', 'ray-line', 'segment', 'arrow-segment', 'buy', 'sell', 'text', 'callout'}
+CATALOG = json.loads(Path(__file__).resolve().with_name('kline_annotation_catalog.json').read_text(encoding='utf-8'))
+ALIASES.update(CATALOG['aliases'])
+TYPES = set(CATALOG['supportedTypes'])
 TWO_POINTS = {'straight-line', 'ray-line', 'segment', 'arrow-segment'}
+
+
+def requested_annotation_type(question: str) -> str:
+    """Only explicit drawing requests select a shape, never incidental discussion."""
+    request = str(question or '').lower()
+    if not re.search(r'画|标记|标注|绘|加上|添加|使用|用|draw|plot|add', request):
+        return ''
+    names = {**{v['label']: k for k, v in CATALOG['typeDefinitions'].items()},
+             '箭头标注':'callout', '引线标注':'callout', '文字':'text', '气泡':'callout',
+             '多头仓位': 'long-position', '空头仓位': 'short-position',
+             '斐波那契扩展': 'fib-extension', '斐波那契回调': 'fib-retracement',
+             '回归趋势': 'regression-channel', '趋势通道': 'regression-channel'}
+    for name in sorted(names, key=len, reverse=True):
+        if name.lower() in request:
+            return names[name]
+    for name in sorted([*TYPES, *ALIASES], key=len, reverse=True):
+        if re.search(r'(?<![a-z-])' + re.escape(name.lower()) + r'(?![a-z-])', request):
+            return ALIASES.get(name, name)
+    return ''
+
+
+def unsupported_annotation_request(question: str) -> bool:
+    return bool(re.search(r'江恩|\bgann\b|趋势角度|平顶.?平底|弧形|双曲线|分价成交|成交量分布|volume.?profile|模拟.?[kK]线|模擬.?[kK]線|forecast.candle|斐波那契(?:圈|弧|楔|速度|趋势时间)|fib[ -](?:circle|arc|wedge|speed|trend.time)',str(question),re.I))
+
+
+def drawing_style(proposal: dict[str, Any]) -> dict[str, Any]:
+    """Whitelist style values; never forward arbitrary CSS, HTML, or execution data."""
+    result = {}
+    for key, lo, hi in [('lineWidth',1,8),('opacity',.1,1),('fillOpacity',0,.5),('fontSize',10,24),('deviation',.1,5),('offsetX',-2000,2000),('offsetY',-2000,2000)]:
+        value = proposal.get(key)
+        if isinstance(value, (int,float)) and not isinstance(value,bool) and math.isfinite(value):
+            result[key] = min(hi,max(lo,value))
+    for key in ('fillColor','textColor'):
+        if re.fullmatch(r'#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})',str(proposal.get(key) or '')):
+            result[key]=proposal[key]
+    if proposal.get('lineStyle') in {'solid','dashed','dotted'}:
+        result['lineStyle']=proposal['lineStyle']
+    for key in ('showLabels','extendLeft','extendRight'):
+        if isinstance(proposal.get(key),bool):
+            result[key]=proposal[key]
+    levels=proposal.get('levels')
+    if isinstance(levels,list):
+        bound=144 if proposal.get('type')=='fib-timezone' else 10
+        valid=list(dict.fromkeys(v for v in levels if isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v) and abs(v)<=bound))[:16]
+        if valid:
+            result['levels']=valid
+    if isinstance(proposal.get('levelColors'),list):
+        colors=[v for v in proposal['levelColors'][:16] if isinstance(v,str) and re.fullmatch(r'#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})',v)]
+        if colors:
+            result['levelColors']=colors
+    if proposal.get('emoji'):
+        result['emoji']=re.sub(r'[\x00-\x1f<>]', '',str(proposal['emoji']))[:16]
+    return result
 
 
 def timestamp(value: Any) -> int | None:
@@ -78,7 +140,7 @@ def kline_annotation_style(annotation: dict[str, Any], *, ma_periods: list[int] 
     return REFERENCE_COLORS[index % len(REFERENCE_COLORS)], text or '技术参考位'
 
 
-def normalize_kline_annotations(proposals: Any, *, symbol: str, period: str, ohlcv: list[dict[str, Any]], ma_periods: list[int] | None = None, market: str = 'US', requested_type: str = '', max_marks: int = 8) -> tuple[dict[str, Any], ...]:
+def normalize_kline_annotations(proposals: Any, *, symbol: str, period: str, ohlcv: list[dict[str, Any]], ma_periods: list[int] | None = None, market: str = 'US', requested_type: str = '', max_marks: int | None = 8) -> tuple[dict[str, Any], ...]:
     """Validate native/legacy proposals against one symbol, period, and candle set."""
     rows = evidence_rows(ohlcv)
     if not symbol.strip() or not period.strip() or not rows or not isinstance(proposals, (list, tuple)):
@@ -87,7 +149,7 @@ def normalize_kline_annotations(proposals: Any, *, symbol: str, period: str, ohl
     low, high = min(r['low'] for r in rows), max(r['high'] for r in rows)
     symbol = symbol.strip().upper()
     result, seen = [], set()
-    for proposal in proposals[:64]:
+    for proposal in proposals:
         if not isinstance(proposal, dict) or str(proposal.get('symbol') or symbol).upper() != symbol or str(proposal.get('period') or period) != period:
             continue
         kind = requested_type or str(proposal.get('type') or 'horizontal-line')
@@ -95,7 +157,8 @@ def normalize_kline_annotations(proposals: Any, *, symbol: str, period: str, ohl
         if kind not in TYPES:
             continue
         points = proposal.get('points') or [{'time': proposal.get('time') or rows[-1]['time'], 'price': proposal.get('price')}]
-        if not isinstance(points, list) or len(points) != (2 if kind in TWO_POINTS else 1):
+        definition = CATALOG['typeDefinitions'][kind]
+        if not isinstance(points, list) or not definition['minPoints'] <= len(points) <= definition['maxPoints']:
             continue
         normalized_points = []
         for point in points:
@@ -109,22 +172,32 @@ def normalize_kline_annotations(proposals: Any, *, symbol: str, period: str, ohl
             if stamp not in time_to_row or not math.isfinite(price) or not low <= price <= high:
                 break
             normalized_points.append({'time': time_to_row[stamp]['time'], 'price': price})
-        if len(normalized_points) != len(points):
+        if len(normalized_points) != len(points) or (len(points)>1 and len({(timestamp(p['time']),p['price']) for p in normalized_points})<2):
             continue
+        stamps=[timestamp(p['time']) for p in normalized_points]
+        if kind in {'parallel-channel','fib-channel','regression-channel','fib-timezone','fib-fan'} and stamps[0]==stamps[1]:
+            continue
+        if kind=='disjoint-channel' and (stamps[0]!=stamps[2] or stamps[1]!=stamps[3] or stamps[0]==stamps[1]):
+            continue
+        if kind in {'long-position','short-position'}:
+            entry,stop,target=(p['price'] for p in normalized_points)
+            if stamps[2]<=stamps[0] or not (stop<entry<target if kind=='long-position' else target<entry<stop):
+                continue
         text = re.sub(r'[\x00-\x1f<>]', '', str(proposal.get('text') or '')).strip()[:80]
-        key = (kind, tuple((timestamp(p['time']), p['price']) for p in normalized_points), text)
+        style=drawing_style(proposal)
+        key = (kind, tuple((timestamp(p['time']), p['price']) for p in normalized_points), text, str(proposal.get('color') or ''), json.dumps(style,sort_keys=True))
         if key in seen:
             continue
         seen.add(key)
         color, label = kline_annotation_style({**proposal, 'type': kind, 'text': text}, ma_periods=ma_periods, market=market, index=len(result))
         mark = {'symbol': symbol, 'type': kind, 'period': period, 'points': normalized_points, 'text': label, 'color': color, 'source': 'jev-kline-policy'}
+        if kind.startswith('fib-') and not re.fullmatch(r'#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})',str(proposal.get('color') or '')):
+            mark.pop('color')  # Native ratio palette, unless user explicitly supplies a common color.
+        mark.update(style)
         if proposal.get('role'):
             mark['role'] = str(proposal['role'])[:30]
-        for field in ('offsetX', 'offsetY'):
-            if isinstance(proposal.get(field), (int, float)) and math.isfinite(proposal[field]):
-                mark[field] = proposal[field]
         result.append(mark)
-        if len(result) >= max_marks:
+        if max_marks is not None and len(result) >= max_marks:
             break
     return tuple(result)
 
@@ -135,6 +208,48 @@ def build_kline_candidates(*, symbol: str, period: str, ohlcv: list[dict[str, An
         return ()
     latest = rows[-1]
     english = language.lower().startswith('en')
+    requested_type=ALIASES.get(requested_type,requested_type)
+    if requested_type and requested_type not in TYPES:
+        return ()
+    if requested_type and CATALOG['typeDefinitions'][requested_type]['minPoints']>1:
+        recent=rows[-60:]
+        if len(recent)<2:
+            return ()
+        def point(row,field='close'):
+            return {'time':row['time'],'price':row[field]}
+        def candidate(points,text):
+            return ({'symbol':symbol,'period':period,'type':requested_type,'points':points,'text':text,'extendRight':requested_type in {'fib-retracement','fib-extension','parallel-channel','regression-channel'}},)
+        if requested_type=='regression-channel':
+            return candidate([point(recent[0]),point(recent[-1])],'Close regression ±2σ' if english else '收盘价回归 ±2σ')
+        if requested_type in {'fib-retracement','rectangle','price-range','date-range','date-price-range'}:
+            low_row=min(recent,key=lambda r:r['low']); high_row=max(recent,key=lambda r:r['high'])
+            extremes=sorted([(low_row,'low'),(high_row,'high')],key=lambda pair:pair[0]['_timestamp'])
+            if extremes[0][0]['_timestamp']==extremes[1][0]['_timestamp']:
+                return ()
+            return candidate([point(row,key) for row,key in extremes],'Observed range' if english else '实际区间高低点')
+        # Confirmed local pivots only; neither latest unfinished pivot nor invented price.
+        lows=[r for i,r in enumerate(recent) if 2<=i<len(recent)-2 and all(r['low']<recent[j]['low'] for j in (i-2,i-1,i+1,i+2))]
+        highs=[r for i,r in enumerate(recent) if 2<=i<len(recent)-2 and all(r['high']>recent[j]['high'] for j in (i-2,i-1,i+1,i+2))]
+        if requested_type in {'segment','straight-line','ray-line','arrow-segment','info-line'}:
+            result=[]
+            for pivots,field,text in ((lows,'low','Swing lows' if english else '局部低点连线'),(highs,'high','Swing highs' if english else '局部高点连线')):
+                if len(pivots)>=2:
+                    result.extend(candidate([point(row,field) for row in pivots[-2:]],text))
+            return tuple(result)
+        if requested_type in {'fib-extension','pitchfork','schiff-pitchfork','modified-schiff-pitchfork'}:
+            pivots=sorted([(r,'low') for r in lows]+[(r,'high') for r in highs],key=lambda pair:pair[0]['_timestamp'])
+            alternating=[]
+            for row,field in pivots:
+                if alternating and alternating[-1][1]==field:
+                    previous=alternating[-1][0]
+                    if (row[field]<previous[field] if field=='low' else row[field]>previous[field]):
+                        alternating[-1]=(row,field)
+                else:
+                    alternating.append((row,field))
+            if len(alternating)>=3:
+                return candidate([point(row,field) for row,field in alternating[-3:]],'Observed pivots · reference' if english else '实际拐点 · 技术参考')
+        # Arbitrary shapes, parallel boundaries and risk scenarios require explicit evidence-bound anchors.
+        return ()
     candidates = []
     def add(row: dict[str, Any], price: float, role: str, text: str, kind: str = 'horizontal-line') -> None:
         anchor = latest if requested_type in {'text', 'callout'} and role in {'support', 'resistance'} else row
@@ -163,15 +278,22 @@ class JevKlineAnnotationPlan:
     provider_model: str
 
 
-def plan_kline_annotations(router: Any, *, question: str, symbol: str, period: str, ohlcv: list[dict[str, Any]], proposals: Any = None, ma_periods: list[int] | None = None, market: str = 'US', language: str = 'zh-CN', requested_type: str = '', min_confidence: float = .55) -> JevKlineAnnotationPlan:
+def plan_kline_annotations(router: Any, *, question: str, symbol: str, period: str, ohlcv: list[dict[str, Any]], proposals: Any = None, ma_periods: list[int] | None = None, market: str = 'US', language: str = 'zh-CN', requested_type: str = '', min_confidence: float = .55, selection_mode: str = 'auto', max_marks: int | None = None) -> JevKlineAnnotationPlan:
     if not router.configured:
         raise ValueError('未配置 LAYA_DECISION_URL')
+    if selection_mode not in {'auto','user-specified','all'}:
+        raise ValueError('selection_mode must be auto, user-specified or all')
+    requested_type=requested_type or (requested_annotation_type(question) if not proposals else '')
+    if not proposals and not requested_type and unsupported_annotation_request(question):
+        raise ValueError('Requested drawing is outside the native catalog; see unsupportedTypes. No substitute marks were generated.')
     raw = proposals if proposals else build_kline_candidates(symbol=symbol, period=period, ohlcv=ohlcv, ma_periods=ma_periods, language=language, requested_type=requested_type)
-    candidates = normalize_kline_annotations(raw, symbol=symbol, period=period, ohlcv=ohlcv, ma_periods=ma_periods, market=market, requested_type=requested_type)
+    candidates = normalize_kline_annotations(raw, symbol=symbol, period=period, ohlcv=ohlcv, ma_periods=ma_periods, market=market, requested_type=requested_type, max_marks=None)
     if not candidates:
         return JevKlineAnnotationPlan((), 'no-mark', 0, '')
     mapping = {f'mark-{i + 1}': mark for i, mark in enumerate(candidates)}
-    state = {'request': str(question)[:6000], 'symbol': symbol, 'period': period, 'candidates': mapping, 'constraint': 'Evaluate each validated candidate independently. Do not invent coordinates. Buy/sell marks are references, not execution or guaranteed signals.'}
+    state = {'request': str(question)[:6000], 'symbol': symbol, 'period': period, 'candidates': mapping,
+             'drawingCapabilities': CATALOG, 'selectionMode':selection_mode,
+             'constraint': 'Evaluate each validated candidate independently. Use only the native catalog types/style. Never invent coordinates or claim projections are observed prices. Buy/sell and long/short positions are technical scenarios, never execution or guaranteed signals.'}
     with router.client_factory(endpoint=router.endpoint, model=router.model, timeout=router.timeout) as client:
         response = client.system_one(state=state, questions={
             'mark_strategy': Choice(instructions='按用户请求选择标记用途；用户明确要求支撑、压力、事件或拐点标记时，不得选 no-mark。', criteria={k: router.MARK_STRATEGIES[k] for k in ('no-mark', 'threshold-reference', 'turning-points', 'event-callouts', 'risk-outliers')}),
@@ -189,7 +311,7 @@ def plan_kline_annotations(router: Any, *, question: str, symbol: str, period: s
         'event-callouts' if any(term in request_text for term in ('事件', '催化', 'event')) else
         'turning-points' if any(term in request_text for term in ('拐点', '高点', '低点', 'turning point')) else
         'risk-outliers' if any(term in request_text for term in ('风险', '异常', '离群', 'outlier', 'risk')) else
-        'threshold-reference' if any(term in request_text for term in ('支撑', '压力', '阻力', '阈值', '水平线', '参考线', 'support', 'resistance', 'threshold')) else ''
+        'threshold-reference' if requested_type or selection_mode!='auto' or any(term in request_text for term in ('支撑', '压力', '阻力', '阈值', '水平线', '参考线', '斐波那契', '通道', 'support', 'resistance', 'threshold')) else ''
     )
     if explicit_strategy:
         strategy_name = explicit_strategy
@@ -200,10 +322,11 @@ def plan_kline_annotations(router: Any, *, question: str, symbol: str, period: s
     for key, mark in mapping.items():
         answer = answers.get(key)
         score = router._confidence(answer)
-        if (getattr(answer, 'choice', '') == 'include' and score >= min_confidence) or (explicit_strategy and proposals):
+        if (getattr(answer, 'choice', '') == 'include' and score >= min_confidence) or (explicit_strategy and proposals) or selection_mode!='auto' or requested_type:
             ranked.append((score, mark))
     ranked.sort(key=lambda item: item[0], reverse=True)
-    selected = [{**mark, 'source': 'jev-kline-plan'} for _, mark in ranked[:3]]
+    limit=None if selection_mode in {'all','user-specified'} else (max_marks if max_marks is not None and max_marks>0 else 3)
+    selected = [{**mark, 'source': 'jev-kline-plan'} for _, mark in (ranked if limit is None else ranked[:limit])]
     return JevKlineAnnotationPlan(tuple(selected), strategy_name, confidence, str(getattr(response, 'model', '')))
 
 
@@ -217,11 +340,19 @@ def main() -> int:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from app.jev_visualization_router import JevVisualizationRouter
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--payload', required=True)
-    parser.add_argument('--question', required=True)
-    parser.add_argument('--output', required=True)
+    parser.add_argument('--catalog', action='store_true', help='Print supported native types, anchors, styles, semantics and explicit limitations.')
+    parser.add_argument('--payload')
+    parser.add_argument('--question')
+    parser.add_argument('--output')
+    parser.add_argument('--selection-mode', choices=['auto','user-specified','all'], default='auto')
+    parser.add_argument('--max-marks', type=int, help='Explicit automatic candidate limit; user-specified/all never truncate validated proposals.')
     parser.add_argument('--normalize-only', action='store_true', help='Validate and style existing marks; never claim a model selection.')
     args = parser.parse_args()
+    if args.catalog:
+        print(json.dumps(CATALOG,ensure_ascii=False,indent=2))
+        return 0
+    if not all((args.payload,args.question,args.output)):
+        parser.error('--payload, --question and --output are required unless --catalog is used')
     payload = json.loads(Path(args.payload).read_text(encoding='utf-8'))
     if not isinstance(payload, dict):
         parser.error('payload must be an object')
@@ -231,17 +362,31 @@ def main() -> int:
     symbol = str(props.get('code') or props.get('symbol') or output.get('symbol') or output.get('code') or '').upper()
     period = str(props.get('dataType') or props.get('period') or output.get('period') or '1d')
     rows = component.get('data') if isinstance(component.get('data'), list) else output.get('data', [])
+    period_data=component.get('dataByPeriod') or output.get('dataByPeriod') or props.get('dataByPeriod')
+    if isinstance(period_data,dict) and isinstance(period_data.get(period),list):
+        rows=period_data[period]
     if not symbol or not evidence_rows(rows):
         parser.error('symbol and verified OHLCV evidence are required')
     options = dict(symbol=symbol, period=period, ohlcv=rows, ma_periods=props.get('ma'), market=str(props.get('financialMarket') or ('CN' if re.search(r'\.(SH|SZ|SS|BJ)$', symbol) else 'HK' if symbol.endswith('.HK') else 'US')))
     if args.normalize_only:
-        marks = normalize_kline_annotations(props.get('annotations', []), **options)
+        marks = normalize_kline_annotations(props.get('annotations', []), max_marks=None, **options)
         receipt = {'policy': 'jev_vis_router', 'selection': 'verified-proposals', 'modelSelected': False}
     else:
-        plan = JevVisualizationRouter().plan_kline_annotations(question=args.question, proposals=props.get('annotations'), language=str(props.get('language') or 'zh-CN'), **options)
+        plan = JevVisualizationRouter().plan_kline_annotations(question=args.question, proposals=props.get('annotations'), language=str(props.get('language') or 'zh-CN'), selection_mode=args.selection_mode, max_marks=args.max_marks, **options)
         marks = plan.annotations
         receipt = {'policy': 'jev_vis_router', 'provider': 'local-laya', 'selection': 'laya', 'modelSelected': True, 'strategy': plan.mark_strategy, 'confidence': plan.confidence, 'model': plan.provider_model}
     other_periods = [mark for mark in props.get('annotations', []) if isinstance(mark, dict) and mark.get('period') and str(mark['period']) != period]
+    diagnostics=[]
+    for index,mark in enumerate(props.get('annotations',[])):
+        if mark in other_periods:
+            continue
+        if not normalize_kline_annotations([mark],max_marks=None,**options):
+            diagnostics.append({'index':index,'type':str(mark.get('type','')) if isinstance(mark,dict) else '', 'reason':'Unsupported type, wrong identity/period, anchor count, price or exact candle time; not approximated.'})
+    if diagnostics:
+        receipt['rejected']=diagnostics
+    if not marks:
+        receipt['warning']='No verified drawing candidates; provide supported types with exact evidence-bound anchors. No substituted geometry.'
+    receipt['catalogVersion']=CATALOG['version']
     props['annotations'] = [*other_periods, *marks]
     receipt['period'] = period
     output['jevAnnotationPlan'] = receipt

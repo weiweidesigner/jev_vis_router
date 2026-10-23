@@ -1,0 +1,373 @@
+{
+  "version": 2,
+  "payloadPath": "props.annotations[]",
+  "supportedTypes": [
+    "straight-line",
+    "ray-line",
+    "segment",
+    "arrow-segment",
+    "info-line",
+    "horizontal-line",
+    "horizontal-ray",
+    "vertical-line",
+    "cross-line",
+    "parallel-channel",
+    "regression-channel",
+    "disjoint-channel",
+    "pitchfork",
+    "schiff-pitchfork",
+    "modified-schiff-pitchfork",
+    "fib-retracement",
+    "fib-extension",
+    "fib-channel",
+    "fib-timezone",
+    "fib-fan",
+    "rectangle",
+    "rotated-rectangle",
+    "ellipse",
+    "circle",
+    "triangle",
+    "path",
+    "polyline",
+    "brush",
+    "highlighter",
+    "curve",
+    "price-range",
+    "date-range",
+    "date-price-range",
+    "long-position",
+    "short-position",
+    "buy",
+    "sell",
+    "text",
+    "callout",
+    "note",
+    "price-label",
+    "flag",
+    "emoji"
+  ],
+  "aliases": {
+    "trend-line": "segment",
+    "extended-line": "straight-line",
+    "arrow": "arrow-segment",
+    "fibonacci-retracement": "fib-retracement",
+    "fibonacci-extension": "fib-extension",
+    "regression-trend": "regression-channel",
+    "price-note": "price-label",
+    "comment": "note",
+    "straightLine": "straight-line",
+    "rayLine": "ray-line",
+    "arrowSegment": "arrow-segment",
+    "horizontal": "horizontal-line",
+    "horizontalStraightLine": "horizontal-line",
+    "vertical": "vertical-line",
+    "verticalStraightLine": "vertical-line",
+    "pure-text": "text"
+  },
+  "point": {
+    "time": "datetime|timestamp",
+    "price": "number"
+  },
+  "fields": {
+    "id": "string (optional)",
+    "type": "string",
+    "period": "K-line tab/period that owns the mark, such as 1d or 1w; defaults to the active tab when created",
+    "points": "Exact candle times and evidence-bound prices; see typeDefinitions for anchor counts. Never snap a missing date to another candle.",
+    "text": "string (required for text/callout; both render in a bubble with an arrow anchored at the point, optional for price lines)",
+    "color": "CSS color (optional)",
+    "offsetX": "number of canvas pixels (optional for text/callout)",
+    "offsetY": "number of canvas pixels (optional for text/callout)",
+    "source": "model|user (optional)",
+    "lineWidth": "1..8 CSS pixels",
+    "lineStyle": "solid|dashed|dotted",
+    "opacity": "0.1..1 (stroke)",
+    "fillColor": "hex color",
+    "fillOpacity": "0..0.5, default 0.08",
+    "fontSize": "10..24 CSS pixels",
+    "textColor": "hex color",
+    "showLabels": "boolean, default true",
+    "extendLeft": "boolean (channels and Fibonacci price levels)",
+    "extendRight": "boolean (channels and Fibonacci price levels)",
+    "levels": "1..16 distinct numbers in [-10,10]; fib-timezone allows [-144,144]. Retracement/channel default [0,.236,.382,.5,.618,.786,1].",
+    "levelColors": "Optional array of 1..16 hex colors in level order; explicit color sets all levels otherwise native ratio palette applies.",
+    "deviation": "0.1..5; regression residual standard deviation multiplier, default 2",
+    "emoji": "1..16 characters for type emoji; plain canvas text, never HTML"
+  },
+  "examples": [
+    {
+      "type": "horizontal-line",
+      "period": "1d",
+      "points": [
+        {
+          "time": "2026-08-13",
+          "price": 348.5
+        }
+      ],
+      "text": "卖出参考"
+    },
+    {
+      "type": "text",
+      "period": "1d",
+      "points": [
+        {
+          "time": "2026-08-13",
+          "price": 348.5
+        }
+      ],
+      "text": "财报日"
+    },
+    {
+      "type": "callout",
+      "period": "1d",
+      "points": [
+        {
+          "time": "2026-08-13",
+          "price": 348.5
+        }
+      ],
+      "text": "压力区"
+    }
+  ],
+  "typeDefinitions": {
+    "straight-line": {
+      "label": "延长线",
+      "minPoints": 2,
+      "maxPoints": 2
+    },
+    "ray-line": {
+      "label": "射线",
+      "minPoints": 2,
+      "maxPoints": 2
+    },
+    "segment": {
+      "label": "趋势线",
+      "minPoints": 2,
+      "maxPoints": 2
+    },
+    "arrow-segment": {
+      "label": "箭头",
+      "minPoints": 2,
+      "maxPoints": 2
+    },
+    "info-line": {
+      "label": "信息线",
+      "minPoints": 2,
+      "maxPoints": 2
+    },
+    "horizontal-line": {
+      "label": "水平线",
+      "minPoints": 1,
+      "maxPoints": 1
+    },
+    "horizontal-ray": {
+      "label": "水平射线",
+      "minPoints": 1,
+      "maxPoints": 1
+    },
+    "vertical-line": {
+      "label": "垂直线",
+      "minPoints": 1,
+      "maxPoints": 1
+    },
+    "cross-line": {
+      "label": "十字线",
+      "minPoints": 1,
+      "maxPoints": 1
+    },
+    "parallel-channel": {
+      "label": "平行通道",
+      "minPoints": 3,
+      "maxPoints": 3
+    },
+    "regression-channel": {
+      "label": "回归通道",
+      "minPoints": 2,
+      "maxPoints": 2
+    },
+    "disjoint-channel": {
+      "label": "不相交通道",
+      "minPoints": 4,
+      "maxPoints": 4
+    },
+    "pitchfork": {
+      "label": "干草叉",
+      "minPoints": 3,
+      "maxPoints": 3
+    },
+    "schiff-pitchfork": {
+      "label": "希夫干草叉",
+      "minPoints": 3,
+      "maxPoints": 3
+    },
+    "modified-schiff-pitchfork": {
+      "label": "改良希夫干草叉",
+      "minPoints": 3,
+      "maxPoints": 3
+    },
+    "fib-retracement": {
+      "label": "斐波那契回撤",
+      "minPoints": 2,
+      "maxPoints": 2
+    },
+    "fib-extension": {
+      "label": "斐波那契趋势扩展",
+      "minPoints": 3,
+      "maxPoints": 3
+    },
+    "fib-channel": {
+      "label": "斐波那契通道",
+      "minPoints": 3,
+      "maxPoints": 3
+    },
+    "fib-timezone": {
+      "label": "斐波那契时区",
+      "minPoints": 2,
+      "maxPoints": 2
+    },
+    "fib-fan": {
+      "label": "斐波那契扇",
+      "minPoints": 2,
+      "maxPoints": 2
+    },
+    "rectangle": {
+      "label": "矩形",
+      "minPoints": 2,
+      "maxPoints": 2
+    },
+    "rotated-rectangle": {
+      "label": "旋转矩形",
+      "minPoints": 3,
+      "maxPoints": 3
+    },
+    "ellipse": {
+      "label": "椭圆",
+      "minPoints": 2,
+      "maxPoints": 2
+    },
+    "circle": {
+      "label": "圆",
+      "minPoints": 2,
+      "maxPoints": 2
+    },
+    "triangle": {
+      "label": "三角形",
+      "minPoints": 3,
+      "maxPoints": 3
+    },
+    "path": {
+      "label": "路径",
+      "minPoints": 2,
+      "maxPoints": 128
+    },
+    "polyline": {
+      "label": "折线",
+      "minPoints": 2,
+      "maxPoints": 128
+    },
+    "brush": {
+      "label": "笔刷",
+      "minPoints": 2,
+      "maxPoints": 128
+    },
+    "highlighter": {
+      "label": "荧光笔",
+      "minPoints": 2,
+      "maxPoints": 128
+    },
+    "curve": {
+      "label": "二次贝塞尔曲线",
+      "minPoints": 3,
+      "maxPoints": 3
+    },
+    "price-range": {
+      "label": "价格范围",
+      "minPoints": 2,
+      "maxPoints": 2
+    },
+    "date-range": {
+      "label": "日期范围",
+      "minPoints": 2,
+      "maxPoints": 2
+    },
+    "date-price-range": {
+      "label": "日期和价格范围",
+      "minPoints": 2,
+      "maxPoints": 2
+    },
+    "long-position": {
+      "label": "多头仓位情景",
+      "minPoints": 3,
+      "maxPoints": 3
+    },
+    "short-position": {
+      "label": "空头仓位情景",
+      "minPoints": 3,
+      "maxPoints": 3
+    },
+    "buy": {
+      "label": "买点参考",
+      "minPoints": 1,
+      "maxPoints": 1
+    },
+    "sell": {
+      "label": "卖点参考",
+      "minPoints": 1,
+      "maxPoints": 1
+    },
+    "text": {
+      "label": "文字气泡",
+      "minPoints": 1,
+      "maxPoints": 1
+    },
+    "callout": {
+      "label": "标注气泡",
+      "minPoints": 1,
+      "maxPoints": 1
+    },
+    "note": {
+      "label": "笔记",
+      "minPoints": 1,
+      "maxPoints": 1
+    },
+    "price-label": {
+      "label": "价格标签",
+      "minPoints": 1,
+      "maxPoints": 1
+    },
+    "flag": {
+      "label": "旗标",
+      "minPoints": 1,
+      "maxPoints": 1
+    },
+    "emoji": {
+      "label": "图标表情",
+      "minPoints": 1,
+      "maxPoints": 1
+    }
+  },
+  "semantics": {
+    "parallel-channel": "First two anchors form a baseline; third sets a parallel boundary. Median is dotted.",
+    "disjoint-channel": "Two separate boundaries: points[0:2] and points[2:4]. No forced parallelism.",
+    "regression-channel": "OLS of actual candle closes between anchor times, bands = +/- deviation * residual population standard deviation.",
+    "pitchfork": "Median from A to midpoint(B,C); outer rays through B,C. Schiff moves A halfway toward B in price; modified Schiff also moves halfway in bar index.",
+    "fib-retracement": "Level r price = B.price + r*(A.price-B.price); 0 at B and 1 at A.",
+    "fib-extension": "Level r price = C.price + r*(B.price-A.price). Projections, not price predictions.",
+    "fib-channel": "Baseline A->B, offset from C at its bar index; level r multiplies that offset.",
+    "fib-timezone": "Verticals at A.index + r*(B.index-A.index), default r=0,1,2,3,5,8. Never map nontrading dates.",
+    "fib-fan": "Rays from A through (B.time, A.price+r*(B.price-A.price)).",
+    "rotated-rectangle": "A,B define first edge; C determines perpendicular width in canvas coordinates.",
+    "circle": "A=center, B=radius endpoint in canvas coordinates; like ellipse/rotation this is viewport-dependent geometry, not an invariant price angle.",
+    "curve": "Quadratic Bezier A->C with B as control point; brush/highlighter connect supplied points, no invented interpolation evidence.",
+    "long-position": "A=entry, B=stop, C=target/end time; require stop<entry<target. Scenario only, no order execution.",
+    "short-position": "A=entry, B=stop, C=target/end time; require target<entry<stop. Scenario only, no order execution.",
+    "measurement": "Price change and percent use anchor prices; date measures count actual candle intervals and elapsed calendar days separately."
+  },
+  "unsupportedTypes": {
+    "gann": "Requires explicit price-per-bar scale and a dedicated implementation; not approximated by screen angles.",
+    "volume-profile": "Use the volume_profile business component with real price-volume distribution; candle OHLCV is not volume-at-price.",
+    "forecast-candles": "No invented future candles, bar-pattern copies, or position forecasts presented as observed prices.",
+    "image-post-idea": "External media/posts require an audited content source and separate content component.",
+    "other-fib-tools": "Fib circles/arcs/wedges, speed-resistance fan and trend-time are not aliases for the supported retracement/fan/timezone.",
+    "other-drawings": "Trend-angle, flat-top/bottom channel, arcs and cubic/double curves are not implemented; circle/rotation use viewport-dependent screen geometry only."
+  }
+}
