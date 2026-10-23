@@ -56,7 +56,7 @@ python -m pytest tests -q
 
 ## K线标记规划与统一策略
 
-`router.plan_kline_annotations(question=..., symbol=..., period=..., ohlcv=..., proposals=..., ma_periods=[20,50,200])` 返回 `JevKlineAnnotationPlan`。数据必须由调用方先取得；本仓库不取行情、不绘图。本地 Laya 只能选择已经通过标的、周期、日期、价格范围校验的候选坐标，低置信度及 `no-mark` 返回空标记。候选可来自已有分析结果；未传候选时只从已提供行情计算区间高低点、近20根支撑压力、最新收盘及有足够样本的均线。不能生成未来价格、未知事件或缺失数据的均线。
+`router.plan_kline_annotations(question=..., symbol=..., period=..., ohlcv=..., proposals=..., ma_periods=[20,50,200])` 返回 `JevKlineAnnotationPlan`。数据必须由调用方先取得；本仓库不取行情、不绘图。本地 Laya 只能选择已经通过标的、周期、日期、价格范围校验的候选坐标，低置信度及 `no-mark` 返回空标记。默认使用 `native-v2-auto`：从真实行情生成趋势线、收盘回归通道、实际拐点平行通道、斐波那契回撤、观察区间/日期价格测量，以及满足三个交替确认拐点时的扩展与干草叉候选；不再默认生成旧的水平线/高低点气泡/MA 参考线集合。旧类型保留明确点名使用与历史渲染兼容，不能生成未来价格、未知事件或缺失数据。
 
 返回原生 `annotations`：支持水平/垂直线、双点线段/射线、买卖点、文字与气泡。统一进行去重、周期绑定、语义配色与 MA 色一致性；显式十六进制颜色优先。买卖点按调用方市场采用相同涨跌色约定。渲染器负责像素坐标、标签避碰、图例、移动端交互。
 
@@ -73,6 +73,8 @@ python app/jev_kline_annotations.py --payload verified-kline.json --question "�
 `python app/jev_kline_annotations.py --catalog` prints the native renderer's mirrored public capability contract (43 types, anchor counts, style whitelist, formula semantics, explicit unsupported families). A compact type/style index is passed to Laya with validated candidates; full definitions remain in the local validator rather than overflowing the CPU sidecar's state budget. The router remains independent: it never imports component code, fetches prices or draws pixels.
 
 Supported families include lines, channels/OLS regression, pitchfork variants, Fibonacci retracement/three-point extension/channel/timezone/fan, geometric paths/shapes, measurements, long/short **scenarios**, notes and emoji. Exact candle times and prices in the verified range are mandatory. Requested fib retracement and regression candidates can be derived from actual OHLCV; confirmed pivots are required for trend lines, pitchforks and fib extensions. Arbitrary geometry and position scenarios require explicit evidence-bound proposals. Missing evidence yields no mark, not substituted geometry.
+
+Automatic planning always offers the eligible v2 pool to Laya, even when upstream analysis supplied old proposals; proposals supplement rather than replace this pool. A type explicitly requested by the user is respected, and `user-specified|all` with an explicit supplied set does not inject additional geometry. Laya independently evaluates include/omit; automatic mode does not force inclusion just because a proposal exists. Equal-purpose trend/channel, retracement and range drawings are deduplicated in the default sparse selection; user scopes/counts are preserved. `candidate_types`, `candidate_count`, `candidate_policy` and CLI `jevAnnotationPlan.candidateTypes/selectedTypes` make actual selection inspectable. Input state carries concise candidate labels rather than full geometry catalogs to fit the local sidecar budget.
 
 Styles survive validation: line width/dash/opacity, fill/color/opacity, font size/text color, level ratios/colors, label visibility and supported extensions. Unsupported CSS/HTML and order fields are never forwarded. `--selection-mode user-specified|all` preserves every validated supplied mark; automatic mode defaults to three, or `--max-marks N`. Rejected inputs are reported in `jevAnnotationPlan.rejected`.
 

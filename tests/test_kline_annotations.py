@@ -28,11 +28,12 @@ def test_semantic_colors_match_ma_identity_and_market_direction():
     assert kline_annotation_style({'type':'buy'},market='US')[0]=='#00b899'
     assert kline_annotation_style({'text':'MA20','color':'#123456'},ma_periods=[20])[0]=='#123456'
 
-def test_candidates_are_computed_from_real_candles_and_available_ma_windows():
+def test_default_pool_uses_native_v2_geometry_instead_of_legacy_reference_pack():
     raw=build_kline_candidates(**{k:v for k,v in CTX.items() if k!='market'})
-    assert any(m['text']=='MA20' and m['price']==pytest.approx(sum(r['close'] for r in ROWS[-20:])/20) for m in raw)
-    assert not any(m['text']=='MA200' for m in raw)
-    assert min(m['price'] for m in raw)>=min(r['low'] for r in ROWS)
+    assert {'regression-channel','fib-retracement','rectangle'} <= {m['type'] for m in raw}
+    assert not any(m['type'] in {'horizontal-line','callout'} or m['text'].startswith('MA') for m in raw)
+    assert all(p['time'] in {r['time'] for r in ROWS} for m in raw for p in m['points'])
+    assert all(min(r['low'] for r in ROWS)<=p['price']<=max(r['high'] for r in ROWS) for m in raw for p in m['points'])
 
 class Client:
     strategy='threshold-reference'
@@ -51,8 +52,9 @@ class Client:
 def test_jev_selects_only_validated_candidate_ids_and_keeps_receipt():
     result=JevVisualizationRouter(api_key='test',client_factory=Client).plan_kline_annotations(question='标记支撑位',proposals=[proposal(),proposal(price=1000)],**CTX)
     assert len(result.annotations)==1 and result.annotations[0]['source']=='jev-kline-plan'
-    assert result.annotations[0]['points'][0]['price']==120 and result.provider_model=='test-jev'
-    assert len(Client.state['candidates'])==1
+    assert result.annotations[0]['points']==Client.state['candidates']['mark-1']['points'] and result.provider_model=='test-jev'
+    assert 'regression-channel' in result.candidate_types
+    assert not any(p['price']==1000 for mark in Client.state['candidates'].values() for p in mark['points'])
 
 @pytest.mark.parametrize('strategy,confidence',[('no-mark',.9),('threshold-reference',.2)])
 def test_no_mark_and_low_confidence_do_not_force_annotations(strategy,confidence):

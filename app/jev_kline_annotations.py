@@ -196,6 +196,8 @@ def normalize_kline_annotations(proposals: Any, *, symbol: str, period: str, ohl
         mark.update(style)
         if proposal.get('role'):
             mark['role'] = str(proposal['role'])[:30]
+        if proposal.get('basis'):
+            mark['basis'] = re.sub(r'[\x00-\x1f<>]', '', str(proposal['basis']))[:240]
         result.append(mark)
         if max_marks is not None and len(result) >= max_marks:
             break
@@ -220,7 +222,12 @@ def build_kline_candidates(*, symbol: str, period: str, ohlcv: list[dict[str, An
         def candidate(points,text):
             return ({'symbol':symbol,'period':period,'type':requested_type,'points':points,'text':text,'extendRight':requested_type in {'fib-retracement','fib-extension','parallel-channel','regression-channel'}},)
         if requested_type=='regression-channel':
-            return candidate([point(recent[0]),point(recent[-1])],'Close regression ±2σ' if english else '收盘价回归 ±2σ')
+            n=len(recent);mean=sum(row['close'] for row in recent)/n;mid=(n-1)/2
+            variance=sum((row['close']-mean)**2 for row in recent)
+            slope=sum((i-mid)*(row['close']-mean) for i,row in enumerate(recent))/sum((i-mid)**2 for i in range(n))
+            residual=sum((row['close']-(mean+slope*(i-mid)))**2 for i,row in enumerate(recent))
+            r2=1-residual/variance if variance else 0
+            return tuple({**mark,'basis':f'{n} observed closes; slope {slope:+.4g}/bar, R²={r2:.3f}. Bands use +/-2 residual standard deviations, not price predictions.'} for mark in candidate([point(recent[0]),point(recent[-1])],'Close regression ±2σ' if english else '收盘价回归 ±2σ'))
         if requested_type in {'fib-retracement','rectangle','price-range','date-range','date-price-range'}:
             low_row=min(recent,key=lambda r:r['low']); high_row=max(recent,key=lambda r:r['high'])
             extremes=sorted([(low_row,'low'),(high_row,'high')],key=lambda pair:pair[0]['_timestamp'])
@@ -236,6 +243,29 @@ def build_kline_candidates(*, symbol: str, period: str, ohlcv: list[dict[str, An
                 if len(pivots)>=2:
                     result.extend(candidate([point(row,field) for row in pivots[-2:]],text))
             return tuple(result)
+        if requested_type=='parallel-channel':
+            result=[]
+            by_time={row['_timestamp']:i for i,row in enumerate(recent)}
+            for pivots,field,opposite in ((lows,'low','high'),(highs,'high','low')):
+                if len(pivots)<2:
+                    continue
+                first,last=pivots[-2:]
+                start,end=by_time[first['_timestamp']],by_time[last['_timestamp']]
+                if end<=start:
+                    continue
+                slope=(last[field]-first[field])/(end-start)
+                baseline=lambda i:first[field]+slope*(i-start)
+                interval=list(enumerate(recent[start:end+1],start))
+                at,third=max(interval,key=lambda pair:(pair[1][opposite]-baseline(pair[0]))*(1 if field=='low' else -1))
+                offset=third[opposite]-baseline(at)
+                if offset==0 or (offset>0)!=(field=='low'):
+                    continue
+                coverage=sum(min(baseline(i),baseline(i)+offset)<=row['close']<=max(baseline(i),baseline(i)+offset) for i,row in interval)/len(interval)
+                if coverage<.65:
+                    continue
+                marks=candidate([point(first,field),point(last,field),point(third,opposite)],'Observed pivot channel' if english else '实际拐点平行通道')
+                result.extend({**mark,'basis':f'Two confirmed {field} pivots; opposite {opposite} anchor from observed bars; {coverage:.1%} close coverage within the anchor interval.'} for mark in marks)
+            return tuple(result)
         if requested_type in {'fib-extension','pitchfork','schiff-pitchfork','modified-schiff-pitchfork'}:
             pivots=sorted([(r,'low') for r in lows]+[(r,'high') for r in highs],key=lambda pair:pair[0]['_timestamp'])
             alternating=[]
@@ -248,8 +278,30 @@ def build_kline_candidates(*, symbol: str, period: str, ohlcv: list[dict[str, An
                     alternating.append((row,field))
             if len(alternating)>=3:
                 return candidate([point(row,field) for row,field in alternating[-3:]],'Observed pivots · reference' if english else '实际拐点 · 技术参考')
-        # Arbitrary shapes, parallel boundaries and risk scenarios require explicit evidence-bound anchors.
+        # Arbitrary decoration and risk scenarios still require explicit evidence-bound anchors.
         return ()
+    if not requested_type:
+        # The native v2 pool replaces the legacy horizontal/callout/MA default.
+        # Every family is independently eligible; JEV may omit all of them.
+        if len(rows)<5 or max(row['high'] for row in rows)==min(row['low'] for row in rows):
+            return ()
+        kinds=[
+            ('segment',rows,'Two confirmed local extrema of the same kind; no unconfirmed endpoint or future candle.'),
+            ('regression-channel',rows,'OLS of actual closes in the latest observed window; bands use residual standard deviation, not predicted prices.'),
+            ('parallel-channel',rows,'Two confirmed same-side pivots and an actual opposite extreme; no guessed boundary.'),
+            ('fib-retracement',rows,'Observed window low and high, ordered by time. Ratio levels are technical references, not future prices.'),
+            ('rectangle',rows[-20:],'Observed low/high anchors from the latest 20 bars; the box spans their timestamps, not a confirmed consolidation claim.'),
+            ('date-price-range',rows,'Time and price change between actual observed extremes; bar intervals and elapsed days remain separate.'),
+            ('fib-extension',rows,'Three alternating confirmed pivots. Extension ratios are scenarios, never observed future prices.'),
+            ('pitchfork',rows,'Three alternating confirmed pivots; median and parallel rays are technical references, not a forecast.'),
+        ]
+        result=[]
+        for kind,sample,basis in kinds:
+            if kind=='regression-channel' and (len(sample)<20 or len({row['close'] for row in sample})<2):
+                continue
+            marks=build_kline_candidates(symbol=symbol,period=period,ohlcv=sample,ma_periods=ma_periods,language=language,requested_type=kind)
+            result.extend({**mark,'basis':mark.get('basis') or basis,'candidatePolicy':'native-v2-auto'} for mark in marks)
+        return tuple(result)
     candidates = []
     def add(row: dict[str, Any], price: float, role: str, text: str, kind: str = 'horizontal-line') -> None:
         anchor = latest if requested_type in {'text', 'callout'} and role in {'support', 'resistance'} else row
@@ -276,6 +328,9 @@ class JevKlineAnnotationPlan:
     mark_strategy: str
     confidence: float
     provider_model: str
+    candidate_types: tuple[str, ...] = ()
+    candidate_count: int = 0
+    candidate_policy: str = 'native-v2-auto'
 
 
 def plan_kline_annotations(router: Any, *, question: str, symbol: str, period: str, ohlcv: list[dict[str, Any]], proposals: Any = None, ma_periods: list[int] | None = None, market: str = 'US', language: str = 'zh-CN', requested_type: str = '', min_confidence: float = .55, selection_mode: str = 'auto', max_marks: int | None = None) -> JevKlineAnnotationPlan:
@@ -283,14 +338,28 @@ def plan_kline_annotations(router: Any, *, question: str, symbol: str, period: s
         raise ValueError('未配置 LAYA_DECISION_URL')
     if selection_mode not in {'auto','user-specified','all'}:
         raise ValueError('selection_mode must be auto, user-specified or all')
-    requested_type=requested_type or (requested_annotation_type(question) if not proposals else '')
-    if not proposals and not requested_type and unsupported_annotation_request(question):
+    requested_type=ALIASES.get(requested_type,requested_type) or requested_annotation_type(question)
+    if not requested_type and unsupported_annotation_request(question):
         raise ValueError('Requested drawing is outside the native catalog; see unsupportedTypes. No substitute marks were generated.')
-    raw = proposals if proposals else build_kline_candidates(symbol=symbol, period=period, ohlcv=ohlcv, ma_periods=ma_periods, language=language, requested_type=requested_type)
-    candidates = normalize_kline_annotations(raw, symbol=symbol, period=period, ohlcv=ohlcv, ma_periods=ma_periods, market=market, requested_type=requested_type, max_marks=None)
+    supplied=list(proposals) if isinstance(proposals,(list,tuple)) else []
+    if selection_mode!='auto' and supplied:
+        raw=supplied  # Explicit user scope is never expanded behind their back.
+    else:
+        generated=build_kline_candidates(symbol=symbol, period=period, ohlcv=ohlcv, ma_periods=ma_periods, language=language, requested_type=requested_type)
+        raw=[*supplied,*generated] if requested_type else [*generated,*supplied]
+        if requested_type:
+            raw=[mark for mark in raw if isinstance(mark,dict) and ALIASES.get(str(mark.get('type')),str(mark.get('type')))==requested_type]
+    candidates = normalize_kline_annotations(raw, symbol=symbol, period=period, ohlcv=ohlcv, ma_periods=ma_periods, market=market, max_marks=None)
+    policy='native-v2-auto' if selection_mode=='auto' and not requested_type else 'native-v2-requested-type' if requested_type else 'native-v2-user-set'
     if not candidates:
-        return JevKlineAnnotationPlan((), 'no-mark', 0, '')
+        return JevKlineAnnotationPlan((), 'no-mark', 0, '',candidate_policy=policy)
     mapping = {f'mark-{i + 1}': mark for i, mark in enumerate(candidates)}
+    candidate_types=tuple(dict.fromkeys(mark['type'] for mark in candidates))
+    observed=evidence_rows(ohlcv)[-60:]
+    observed_low=min(row['low'] for row in observed);observed_high=max(row['high'] for row in observed)
+    evidence_summary={'bars':len(observed),'lastClose':round(observed[-1]['close'],6),
+                      'windowChangePct':round((observed[-1]['close']/observed[0]['close']-1)*100,3),
+                      'windowLow':round(observed_low,6),'windowHigh':round(observed_high,6)}
     state = {'request': str(question)[:6000], 'symbol': symbol, 'period': period, 'candidates': mapping,
              # Full definitions remain in the validator/catalog CLI. The CPU
              # sidecar has a 2,000-token state budget; don't resend all formulas.
@@ -298,12 +367,14 @@ def plan_kline_annotations(router: Any, *, question: str, symbol: str, period: s
                                      'activeTypes':sorted({mark['type'] for mark in candidates}),
                                      'styleFields':['lineWidth','lineStyle','opacity','fillColor','fillOpacity','fontSize','textColor','showLabels','extendLeft','extendRight','levels','levelColors']},
              'selectionMode':selection_mode,
+             'candidateSummary':list(dict.fromkeys((mark['type'],mark['text']) for mark in candidates)),
+             'observedEvidence':evidence_summary,
              'constraint': 'Evaluate each validated candidate independently. Use only the native catalog types/style. Never invent coordinates or claim projections are observed prices. Buy/sell and long/short positions are technical scenarios, never execution or guaranteed signals.'}
     with router.client_factory(endpoint=router.endpoint, model=router.model, timeout=router.timeout) as client:
         response = client.system_one(state=state, questions={
-            'mark_strategy': Choice(instructions='按用户请求选择标记用途；用户明确要求支撑、压力、事件或拐点标记时，不得选 no-mark。', criteria={k: router.MARK_STRATEGIES[k] for k in ('no-mark', 'threshold-reference', 'turning-points', 'event-callouts', 'risk-outliers')}),
+            'mark_strategy': Choice(instructions='依据问题和原生候选选择用途；普通技术分析也要评估趋势、通道、回撤、区间，不要求用户点名。无关或证据不足允许 no-mark。', criteria={k: router.MARK_STRATEGIES[k] for k in ('no-mark', 'threshold-reference', 'turning-points', 'event-callouts', 'risk-outliers')}),
             **{key: Choice(instructions=f'根据用户请求独立评估已验证候选 {key}；明确要求且直接匹配时选 include。', criteria={
-                'include': f'This validated candidate directly supports the requested analysis: {mark["text"]}, {mark["type"]}, {mark["points"]}.',
+                'include': f'{mark["type"]}: {mark["text"]}. Evidence: {mark.get("basis") or "Exact verified anchors"}. Directly explains the requested analysis.',
                 'omit': 'This candidate is unnecessary, irrelevant, or insufficiently supported for the request.',
             }) for key, mark in mapping.items()},
         })
@@ -318,21 +389,32 @@ def plan_kline_annotations(router: Any, *, question: str, symbol: str, period: s
         'risk-outliers' if any(term in request_text for term in ('风险', '异常', '离群', 'outlier', 'risk')) else
         'threshold-reference' if requested_type or selection_mode!='auto' or any(term in request_text for term in ('支撑', '压力', '阻力', '阈值', '水平线', '参考线', '斐波那契', '通道', 'support', 'resistance', 'threshold')) else ''
     )
-    if explicit_strategy:
+    explicit_drawing_intent=bool(requested_type or selection_mode!='auto' or re.search(r'画|标记|标注|绘|可视化|\bdraw\b|\bannotate\b|\bmark\b',request_text))
+    if explicit_strategy and explicit_drawing_intent:
         strategy_name = explicit_strategy
         confidence = max(confidence, 1.0)
     if strategy_name not in {'threshold-reference', 'turning-points', 'event-callouts', 'risk-outliers'} or confidence < min_confidence:
-        return JevKlineAnnotationPlan((), 'no-mark', confidence, str(getattr(response, 'model', '')))
+        return JevKlineAnnotationPlan((), 'no-mark', confidence, str(getattr(response, 'model', '')),candidate_types,len(candidates),policy)
     ranked = []
     for key, mark in mapping.items():
         answer = answers.get(key)
         score = router._confidence(answer)
-        if (getattr(answer, 'choice', '') == 'include' and score >= min_confidence) or (explicit_strategy and proposals) or selection_mode!='auto' or requested_type:
+        if (getattr(answer, 'choice', '') == 'include' and score >= min_confidence) or selection_mode!='auto' or requested_type:
             ranked.append((score, mark))
     ranked.sort(key=lambda item: item[0], reverse=True)
     limit=None if selection_mode in {'all','user-specified'} else (max_marks if max_marks is not None and max_marks>0 else 3)
+    if selection_mode=='auto' and max_marks is None:
+        families,diverse=set(),[]
+        for score,mark in ranked:
+            family=('trend' if mark['type'] in {'segment','straight-line','ray-line','parallel-channel','regression-channel','pitchfork'} else
+                    'retracement' if mark['type'] in {'fib-retracement','fib-extension','fib-channel'} else
+                    'range' if mark['type'] in {'rectangle','date-price-range','price-range','date-range'} else
+                    'reference' if mark['type'] in {'horizontal-line','horizontal-ray','text','callout','price-label'} else mark['type'])
+            if family not in families:
+                families.add(family);diverse.append((score,mark))
+        ranked=diverse
     selected = [{**mark, 'source': 'jev-kline-plan'} for _, mark in (ranked if limit is None else ranked[:limit])]
-    return JevKlineAnnotationPlan(tuple(selected), strategy_name, confidence, str(getattr(response, 'model', '')))
+    return JevKlineAnnotationPlan(tuple(selected), strategy_name, confidence, str(getattr(response, 'model', '')),candidate_types,len(candidates),policy)
 
 
 def main() -> int:
@@ -379,7 +461,8 @@ def main() -> int:
     else:
         plan = JevVisualizationRouter().plan_kline_annotations(question=args.question, proposals=props.get('annotations'), language=str(props.get('language') or 'zh-CN'), selection_mode=args.selection_mode, max_marks=args.max_marks, **options)
         marks = plan.annotations
-        receipt = {'policy': 'jev_vis_router', 'provider': 'local-laya', 'selection': 'laya', 'modelSelected': True, 'strategy': plan.mark_strategy, 'confidence': plan.confidence, 'model': plan.provider_model}
+        receipt = {'policy': 'jev_vis_router', 'provider': 'local-laya', 'selection': 'laya' if plan.provider_model else 'no-eligible-candidates', 'modelSelected': bool(plan.provider_model), 'strategy': plan.mark_strategy, 'confidence': plan.confidence, 'model': plan.provider_model}
+        receipt.update(candidatePolicy=plan.candidate_policy,candidateTypes=list(plan.candidate_types),candidateCount=plan.candidate_count,selectedTypes=list(dict.fromkeys(mark['type'] for mark in marks)))
     other_periods = [mark for mark in props.get('annotations', []) if isinstance(mark, dict) and mark.get('period') and str(mark['period']) != period]
     diagnostics=[]
     for index,mark in enumerate(props.get('annotations',[])):
