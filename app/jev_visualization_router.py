@@ -82,7 +82,7 @@ class JevVisualizationRouter:
         "leaders-laggards": "Recolor or emphasize the strongest and weakest comparable categories or series after ranking from structured data.",
         "contribution-focus": "Emphasize the categories or steps that explain the largest evidence-backed contribution to a total or change.",
         "risk-outliers": "Emphasize verified downside, outliers, concentration, or exceptional observations without hiding the surrounding distribution.",
-        "signed-direction": "For a single-series bar encoding signed change, return, growth, delta, or profit/loss, color positive values green, negative values red, and zero neutral. Do not use value colors on a multi-series grouped bar because color must remain available for series identity.",
+        "signed-direction": "For a single-series bar encoding signed change, return, growth, delta, or profit/loss, mark positive, negative, and zero values semantically. Do not hardcode red or green: the renderer maps price-up and price-down colors from financialMarket (CN/HK red-up green-down; US green-up red-down). Do not use value colors on a multi-series grouped bar because color must remain available for series identity.",
         "distribution-polarity": "For a signed histogram, derive polarity from x-axis bins rather than bar height. A single-series histogram may use red/green/neutral bars. A multi-series grouped distribution must preserve series colors and express polarity with the zero boundary or subtle plot regions.",
     }
 
