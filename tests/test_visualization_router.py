@@ -192,3 +192,28 @@ def test_router_returns_mobile_intraday_columns(columns):
     router = JevVisualizationRouter(api_key="test-key", client_factory=GridClient)
     decision = router.route(question="比较多只股票的分时", candidates=[{"script":"multi_intraday.py", "family":"business-chart", "label":"多分时", "description":"Intraday comparison"}])
     assert decision.mobile_columns == int(columns)
+
+
+def test_actual_card_count_layout_is_selected_by_model():
+    class LayoutClient(FakeClient):
+        def system_one(self, *, state, questions):
+            assert state['cardCount']==5
+            assert '3+2' in questions['card_layout'].criteria
+            return SimpleNamespace(model='test-local-laya',answers={'card_layout':SimpleNamespace(choice='3+2',confidence=.9)})
+    result=JevVisualizationRouter(client_factory=LayoutClient).plan_card_layout(card_count=5)
+    assert result['source']=='jev' and result['rowCounts']==[3,2] and result['cardCount']==5
+
+
+def test_card_layout_does_not_silently_replace_invalid_model_result():
+    class BadClient(FakeClient):
+        def system_one(self, **kwargs):
+            return SimpleNamespace(model='test',answers={'card_layout':SimpleNamespace(choice='4+1',confidence=.99)})
+    with pytest.raises(JevVisualizationRouterError):
+        JevVisualizationRouter(client_factory=BadClient).plan_card_layout(card_count=5)
+
+
+def test_model_can_choose_another_valid_layout():
+    class DetailedClient(FakeClient):
+        def system_one(self, **kwargs):
+            return SimpleNamespace(model='test',answers={'card_layout':SimpleNamespace(choice='1+1+1+1+1',confidence=.8)})
+    assert JevVisualizationRouter(client_factory=DetailedClient).plan_card_layout(card_count=5)['rowCounts']==[1]*5

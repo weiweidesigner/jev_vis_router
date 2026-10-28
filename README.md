@@ -79,3 +79,7 @@ Automatic planning always offers the eligible v2 pool to Laya, even when upstrea
 Styles survive validation: line width/dash/opacity, fill/color/opacity, font size/text color, level ratios/colors, label visibility and supported extensions. Unsupported CSS/HTML and order fields are never forwarded. `--selection-mode user-specified|all` preserves every validated supplied mark; automatic mode defaults to three, or `--max-marks N`. Rejected inputs are reported in `jevAnnotationPlan.rejected`.
 
 Gann, synthetic future candles, external media/posts and the remaining advanced Fibonacci tools are explicitly **not implemented**. Volume-at-price must use the actual volume-profile component/data source, not an invented OHLCV allocation. See the catalog's `unsupportedTypes` rather than assuming parity with the full TradingView drawing suite.
+
+## Actual-count card layout
+
+`router.plan_card_layout(card_count=5, question="compare intraday sessions", max_columns=4, mobile_columns=1)` asks local Laya to choose balanced rows after data is fetched. The receipt includes source, providerModel, cardCount, rowCounts, columns, mobileColumns and confidence. Candidate rows cover every card, differ by at most one, and avoid orphan cards. Each row fills its width. An unavailable model raises JevVisualizationRouterError; callers must disclose failures. No quote cache or scheduled request is created.

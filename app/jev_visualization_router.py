@@ -130,6 +130,32 @@ class JevVisualizationRouter:
         except Exception as exc:
             raise JevVisualizationRouterError(f"Laya K线标记规划失败：{exc}") from exc
 
+    def plan_card_layout(self, *, card_count: int, question: str = "", max_columns: int = 4, mobile_columns: int = 1) -> dict[str, Any]:
+        """Choose per-row counts only after the caller knows the actual card count."""
+        if type(card_count) is not int or not 1 <= card_count <= 8:
+            raise ValueError("card_count must be 1..8")
+        if type(max_columns) is not int or not 1 <= max_columns <= 4 or type(mobile_columns) is not int or not 1 <= mobile_columns <= 4:
+            raise ValueError("column bounds must be 1..4")
+        plans = {}
+        for cap in range(1, min(card_count,max_columns)+1):
+            rows = (card_count+cap-1)//cap
+            base, extra = divmod(card_count,rows)
+            counts = [base+(i<extra) for i in range(rows)]
+            if min(counts)==1 and max(counts)>1:
+                continue  # Avoid an orphan card when a balanced alternative exists.
+            key = "+".join(map(str,counts))
+            plans[key] = counts
+        criteria = {key: f"{len(counts)} rows, cards per row {counts}; each row fills width; " + ("detailed single-column reading" if max(counts)==1 else "simultaneous comparison") for key,counts in plans.items()}
+        try:
+            with self.client_factory(endpoint=self.endpoint,model=self.model,timeout=self.timeout) as client:
+                response=client.system_one(state={"cardCount":card_count,"request":question[:600],"goal":"Balanced intraday comparison; use 2–3 cards per row for normal desktop comparisons, avoid unnecessarily tall single-column stacks, keep readable charts."},questions={"card_layout":Choice(instructions="Choose balanced desktop rows for the actual card count. Honor explicit width constraints. Prefer a compact comparison with 2–3 charts per row, all cards visible without horizontal scrolling. Choose single column only for detailed reading or a single card.",criteria=criteria)})
+            answer=response.answers["card_layout"]
+            if answer.choice not in plans:
+                raise ValueError("unknown card layout")
+            return {"source":"jev","providerModel":response.model,"cardCount":card_count,"rowCounts":plans[answer.choice],"columns":max(plans[answer.choice]),"mobileColumns":mobile_columns,"confidence":self._confidence(answer)}
+        except Exception as exc:
+            raise JevVisualizationRouterError(f"Laya card layout planning failed: {exc}") from exc
+
     def route(
         self,
         *,
