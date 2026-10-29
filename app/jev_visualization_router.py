@@ -145,6 +145,11 @@ class JevVisualizationRouter:
                 continue  # Avoid an orphan card when a balanced alternative exists.
             key = "+".join(map(str,counts))
             plans[key] = counts
+        if len(plans) == 1:
+            counts = next(iter(plans.values()))
+            return {"source":"constraints","modelSelected":False,"reason":"only-feasible-layout",
+                    "cardCount":card_count,"rowCounts":counts,"columns":max(counts),
+                    "mobileColumns":mobile_columns}
         criteria = {key: f"{len(counts)} rows, cards per row {counts}; each row fills width; " + ("detailed single-column reading" if max(counts)==1 else "simultaneous comparison") for key,counts in plans.items()}
         try:
             with self.client_factory(endpoint=self.endpoint,model=self.model,timeout=self.timeout) as client:

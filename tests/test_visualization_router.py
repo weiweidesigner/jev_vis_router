@@ -217,3 +217,13 @@ def test_model_can_choose_another_valid_layout():
         def system_one(self, **kwargs):
             return SimpleNamespace(model='test',answers={'card_layout':SimpleNamespace(choice='1+1+1+1+1',confidence=.8)})
     assert JevVisualizationRouter(client_factory=DetailedClient).plan_card_layout(card_count=5)['rowCounts']==[1]*5
+
+
+@pytest.mark.parametrize("card_count,max_columns", [(1,4),(5,1)])
+def test_single_feasible_layout_does_not_call_two_option_decision_service(card_count,max_columns):
+    def unexpected_client(**kwargs):
+        raise AssertionError("A forced layout has no model decision to make")
+    result=JevVisualizationRouter(client_factory=unexpected_client).plan_card_layout(
+        card_count=card_count,max_columns=max_columns,mobile_columns=2)
+    assert result=={"source":"constraints","modelSelected":False,"reason":"only-feasible-layout",
+                    "cardCount":card_count,"rowCounts":[1]*card_count,"columns":1,"mobileColumns":2}
