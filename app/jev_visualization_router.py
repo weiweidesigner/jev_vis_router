@@ -75,6 +75,7 @@ class JevVisualizationRouter:
         "user-data-only": "Use only user-provided or upstream structured data; do not fetch news or media unless the user explicitly requests it.",
     }
     MARK_STRATEGIES = {
+        "missing-value-placeholder": "When the user explicitly requests a hatched missing/unreported bar, preserve null source values and use native grouped_bar.py barPlaceholders (chart-markup bar-placeholder). Resolve the exact target and distinct same-row referenceSeries from verified data; hatch height follows that reference, while tooltip/legend show a localized missing status. Do not fabricate actual values or route to custom HTML for this native capability.",
         "no-mark": "Keep the renderer defaults. Do not add decorative emphasis when no evidence-backed focal point is needed.",
         "turning-points": "Emphasize verified peaks, troughs, reversals, or slope changes with a small number of point or range marks.",
         "event-callouts": "Attach verified event time and title callouts to matching points on a time series; never infer an event date.",
@@ -248,7 +249,7 @@ class JevVisualizationRouter:
                                 "Choose whether the chart needs an evidence-backed annotation layer. Marks must clarify a "
                                 "decision-relevant point, not decorate the chart. Prefer a concrete mark strategy whenever the "
                                 "selected chart naturally exposes a decision-relevant turning point, event, threshold, leader/laggard, "
-                                "contribution driver, signed direction, or risk outlier. Choose no-mark only when neither the request "
+                                "contribution driver, signed direction, missing-value placeholder, or risk outlier. Choose no-mark only when neither the request "
                                 "nor the selected visual semantics can identify one of those evidence-resolvable relationships. "
                                 "For a single-series bar or bar-line view whose bars represent signed change, return, growth, "
                                 "delta, P&L, or rise/fall, choose signed-direction even when the user did not explicitly request "

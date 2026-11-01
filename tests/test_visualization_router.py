@@ -227,3 +227,14 @@ def test_single_feasible_layout_does_not_call_two_option_decision_service(card_c
         card_count=card_count,max_columns=max_columns,mobile_columns=2)
     assert result=={"source":"constraints","modelSelected":False,"reason":"only-feasible-layout",
                     "cardCount":card_count,"rowCounts":[1]*card_count,"columns":1,"mobileColumns":2}
+
+
+def test_missing_placeholder_strategy_preserves_native_grouped_bar(monkeypatch):
+    monkeypatch.setattr(FakeClient, 'primary_choice', 'visual-1')
+    monkeypatch.setattr(FakeClient, 'supporting_choice', 'no-visual')
+    monkeypatch.setattr(FakeClient, 'mark_strategy', 'missing-value-placeholder')
+    decision = JevVisualizationRouter(api_key='test-key', client_factory=FakeClient).route(
+        question='Compare actual and estimate; hatch the missing actual at estimate height',
+        candidates=[{'script': 'grouped_bar.py', 'family': 'generic-chart', 'label': 'Grouped bar', 'description': 'Compare groups'}])
+    assert decision.primary_script == 'grouped_bar.py'
+    assert decision.mark_strategy == 'missing-value-placeholder'
